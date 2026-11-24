@@ -1,0 +1,5 @@
+-- Déjà appliquées sur le projet cmvkijtlkzfwnzipgstc le 24/11/2026 (migrations
+-- « portail_phase1_catalogue_et_droits » et « portail_tickets_et_profil »).
+-- Référence uniquement : ne pas réexécuter sur ce projet.
+-- Contenu : tables portail_outils (catalogue), portail_journal (usage), portail_tickets,
+-- fonctions portail_mes_outils() et portail_moi() (security definer, lecture des 4 tables de membres existantes).

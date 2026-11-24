@@ -27,7 +27,13 @@ Insérer une ligne dans `portail_outils` (slug, nom, description en une phrase o
 
 ## Connexion unique
 
-Le portail utilise le même client supabase-js et la même origine que la charte et le pilotage : une connexion ouvre les trois, une déconnexion les ferme. Les cockpits appels et granulés ont leur propre session (fonction Edge) : ils demandent encore une connexion, jusqu'à la phase 2.
+Le portail est la seule page de connexion. Tous les outils sont servis depuis la même origine (`hympyr-energies.github.io`) et lisent la même session supabase-js : une connexion au portail ouvre la charte, le pilotage et les deux cockpits ; une déconnexion, où qu'elle soit faite, les ferme tous.
+
+- Un outil ouvert sans session renvoie ici avec `?retour=<adresse de l'outil>&outil=<slug>`. Après connexion, le portail y retourne seulement si l'adresse appartient à un outil autorisé pour la personne (pas de redirection ouverte).
+- Un outil qui refuse le compte (pas membre) renvoie ici avec `?outil=<slug>&refus=1` : le portail l'explique sans repartir vers l'outil, et la session reste ouverte pour les autres outils.
+- Garde-fou : un outil qui revient du portail sans session en moins de 20 s affiche un message au lieu de rediriger (pas de boucle).
+- Les anciens liens « mot de passe oublié » arrivés sur un outil sont transmis au portail, où se choisit le nouveau mot de passe.
+- Les cockpits gardent leur fonction Edge (`fificli-api`, `granules-state`) pour les données : elle valide le jeton de la session commune et l'appartenance à la table de membres.
 
 ## Mesure d'adoption
 

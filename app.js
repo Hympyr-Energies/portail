@@ -626,11 +626,13 @@ function outilDeRetour() {
   if (!brut) return null;
   let u; try { u = new URL(brut, location.href); } catch (e) { return { outil: null }; }
   if (u.protocol !== 'https:' && u.hostname !== 'localhost') return { outil: null };
-  const outil = S.outils.find(o => { try { const b = new URL(o.url); return u.origin === b.origin && u.pathname.startsWith(b.pathname); } catch (e) { return false; } });
+  // Chemin comparé sans la casse : GitHub Pages sert /HYM_FICLI_001/ comme /hym_ficli_001/
+  const outil = S.outils.find(o => { try { const b = new URL(o.url); return u.origin === b.origin && u.pathname.toLowerCase().startsWith(b.pathname.toLowerCase()); } catch (e) { return false; } });
   return { outil, url: u.href };
 }
 function nomOutilDeRetour() {
-  const brut = new URLSearchParams(location.search).get('retour'); if (!brut) return '';
+  const q = new URLSearchParams(location.search);
+  const brut = q.get('retour') || q.get('refus'); if (!brut) return '';
   const slug = new URLSearchParams(location.search).get('outil') || '';
   return { cockpit_appels: 'le cockpit appels', cockpit_granules: 'le cockpit granulés', renommage_tournees: 'le renommage des tournées', pilotage_communication: 'le pilotage communication', charte: 'la charte graphique' }[slug] || 'votre outil';
 }
@@ -666,6 +668,12 @@ async function enterApp(session, { fresh = false } = {}) {
   const today = new Date().toISOString().slice(0, 10), k = 'hy-portail-cx-' + S.user.id;
   if (fresh || store.get(k, '') !== today) { store.set(k, today); journal('connexion'); }
 
+  // Un outil a refusé ce compte (?refus=1) : on l'explique ici, sans repartir vers l'outil (pas de boucle)
+  if (new URLSearchParams(location.search).get('refus')) {
+    const nom = nomOutilDeRetour();
+    history.replaceState(null, '', location.pathname + location.hash);
+    setTimeout(() => toast(`Votre compte n'a pas accès à ${nom === 'votre outil' ? 'cet outil' : nom}. Demandez un accès avec le bouton ticket.`, 'x'), 700);
+  }
   // Retour vers l'outil qui a renvoyé ici (?retour=…), seulement s'il fait partie des outils autorisés
   const cible = outilDeRetour();
   if (cible) {

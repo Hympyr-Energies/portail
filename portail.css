@@ -96,3 +96,30 @@ a.bb{text-decoration:none}
   .adm-acl-row b{grid-column:1/-1}
   .tk-row{grid-template-columns:1fr}
 }
+
+/* Bascule clair/sombre : un seul fondu de 280 ms, aucune transition parasite pendant la bascule */
+html.theme-switch *,html.theme-switch *::before,html.theme-switch *::after{transition:none!important}
+html.vt-fade::view-transition-old(root),html.vt-fade::view-transition-new(root){
+  animation-duration:280ms;animation-timing-function:cubic-bezier(.4,0,.2,1);mix-blend-mode:normal}
+
+/* Console : comptes de connexion */
+.adm-tools-r{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.adm-pwd{display:flex;gap:8px;align-items:center}
+.adm-pwd .input{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.04em}
+.adm-pwd .icon-btn{flex:none}
+.adm-danger{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px 16px;align-items:center;margin-top:24px;padding-top:20px;border-top:1px solid var(--hair)}
+.adm-danger b{display:block;font-size:14px;color:var(--head)}
+.adm-danger span{font-size:13px;color:var(--muted)}
+.adm-danger .msg{grid-column:1/-1}
+.btn.danger{color:var(--err)}
+.btn.danger::after{background:radial-gradient(140px circle at var(--mx) var(--my),color-mix(in srgb,var(--err) 18%,transparent),transparent 65%)}
+.adm-cred{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px 16px;text-align:left;padding:16px 18px;border-radius:14px;
+  background:color-mix(in srgb,var(--text) 4%,transparent);border:1px solid var(--hair);width:100%;margin:6px 0 4px}
+.adm-cred span{font-size:12.5px;color:var(--muted)}
+.adm-cred b{font-size:14px;color:var(--head);overflow-wrap:anywhere}
+.adm-cred .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:15px;letter-spacing:.06em}
+@media (max-width:860px){
+  .adm-danger{grid-template-columns:1fr}
+  .adm-danger .btn{justify-self:start}
+  .adm-cred{grid-template-columns:1fr}
+}

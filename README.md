@@ -36,3 +36,13 @@ Le portail utilise le même client supabase-js et la même origine que la charte
 ## Réglages Supabase à faire
 
 Authentication > URL Configuration : ajouter l'adresse du portail aux « Redirect URLs » pour que le lien « Mot de passe oublié » y ramène.
+
+## Administration (administrateurs du portail)
+
+Onglet « Administration », visible seulement si `portail_est_admin()` est vrai (la base refuse le reste via RLS).
+- Collaborateurs : outils et rôle par outil, date de fin d'accès facultative, pôle, compte actif, administrateur du portail.
+  Chaque changement est recopié par trigger dans la table de membres de l'outil concerné.
+- Nouveaux comptes : inviter la personne depuis Supabase (Authentication > Users > Invite user), puis « Ajouter » ici.
+- Tickets : changement de statut (ouvert, en cours, résolu).
+- Garde-fous : on désactive, on ne supprime pas ; il reste toujours au moins un administrateur actif.
+Prérequis SQL : `supabase/migrations/20261124_portail_admin.sql`.

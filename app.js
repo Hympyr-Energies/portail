@@ -440,8 +440,11 @@ function editHTML(c, isNew) {
       </div>
       <p class="muted" style="font-size:13px;margin-top:-6px">La personne devra choisir son propre mot de passe à sa première connexion.</p>` : '';
   const actions = creation || isNew ? '' : `<div class="adm-danger">
-      <div><b>Mot de passe</b><span>Génère un mot de passe temporaire à transmettre. Il devra être changé à la connexion.</span></div>
-      <button class="btn ghost sm mag" type="button" data-pwd-reset>${ic('key')}<span>Mot de passe temporaire</span></button>
+      <div class="adm-pwd-block"><b>Nouveau mot de passe</b><span>Saisissez-le ou générez-en un. ${moi ? 'Il remplace le vôtre immédiatement.' : 'La personne devra le changer à sa prochaine connexion.'}</span>
+        <div class="adm-pwd"><input class="input" id="aPwdReset" autocomplete="off" spellcheck="false" value="${esc(genMdp())}" aria-label="Nouveau mot de passe">
+          <button class="icon-btn" type="button" data-regen-reset aria-label="Générer un autre mot de passe" title="Générer un autre mot de passe">${ic('refresh')}</button></div>
+        <span class="adm-hint">${MDP_REGLE}.</span></div>
+      <button class="btn ghost sm mag" type="button" data-pwd-reset>${ic('key')}<span>Définir</span></button>
       ${moi ? '' : `<div><b>Supprimer le compte</b><span>Retire tous ses accès dans les outils puis supprime son compte de connexion. Définitif.</span></div>
       <button class="btn ghost sm mag danger" type="button" data-delete>${ic('trash')}<span>Supprimer</span></button>`}
       <p class="msg" id="aActMsg" role="status" aria-live="polite"></p>
@@ -478,6 +481,7 @@ function openEdit(c, isNew) {
   $$('[data-acl]').forEach(sel => sel.onchange = () => { const d = $(`[data-exp="${sel.dataset.acl}"]`); d.disabled = !sel.value; if (!sel.value) d.value = ''; });
   const rg = $('[data-regen]'); if (rg) rg.onclick = () => { $('#aPwd').value = genMdp(); };
   const pr = $('[data-pwd-reset]'); if (pr) pr.onclick = () => resetPwd(c, pr);
+  const rr = $('[data-regen-reset]'); if (rr) rr.onclick = () => { $('#aPwdReset').value = genMdp(); if (pr) { pr.dataset.armed = ''; pr.lastChild.textContent = 'Définir'; } };
   const dl = $('[data-delete]'); if (dl) dl.onclick = () => deleteUser(c, dl);
   setTimeout(() => ($('#aEmail') || $('#aPrenom')).focus({ preventScroll: true }), 200);
 }
@@ -546,11 +550,14 @@ async function createUser() {
   bindCopy(email, mdp); A.loaded = false; openAdmin();
 }
 async function resetPwd(c, btn) {
+  const mdp = $('#aPwdReset').value.trim();
+  if (!mdpValide(mdp)) { btn.dataset.armed = ''; btn.lastChild.textContent = 'Définir'; setMsg($('#aActMsg'), `Mot de passe refusé : ${MDP_REGLE}.`); $('#aPwdReset').focus(); return; }
   if (btn.dataset.armed !== '1') { btn.dataset.armed = '1'; btn.lastChild.textContent = 'Confirmer'; setMsg($('#aActMsg'), 'Son mot de passe actuel cessera de fonctionner. Cliquez sur « Confirmer ».', 'ok'); return; }
-  const mdp = genMdp(); btn.disabled = true;
+  btn.disabled = true;
   try { await adminCall('mot_de_passe', { user_id: c.user_id, password: mdp }); }
   catch (e) { btn.disabled = false; setMsg($('#aActMsg'), e.message); return; }
-  $('#ticketModal').innerHTML = mdpHTML('Mot de passe réinitialisé', c.email, mdp, `${nomCollab(c)} devra choisir son propre mot de passe à la prochaine connexion.`);
+  const moi = c.user_id === S.user.id;
+  $('#ticketModal').innerHTML = mdpHTML('Mot de passe modifié', c.email, mdp, moi ? 'Votre nouveau mot de passe est actif pour tous les outils.' : `${nomCollab(c)} devra choisir son propre mot de passe à la prochaine connexion.`);
   bindCopy(c.email, mdp);
 }
 async function deleteUser(c, btn) {

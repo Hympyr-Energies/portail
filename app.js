@@ -52,7 +52,7 @@ const ic = (n, cls = 'i') => `<svg class="${cls}" viewBox="0 0 24 24" aria-hidde
 // Libellé court pour la barre mobile (11 px, une ligne)
 const TOOL_SHORT = { cockpit_appels: 'Appels', cockpit_granules: 'Granulés', renommage_tournees: 'Tournées', pilotage_communication: 'Com', charte: 'Charte' };
 const TOOL_ICON = { cockpit_appels: 'phone', cockpit_granules: 'calc', renommage_tournees: 'file', pilotage_communication: 'calendar', charte: 'palette' };
-const ROLE_LABEL = { admin: 'Administrateur', manager: 'Manager', commercial: 'Commercial', direction: 'Direction', editeur: 'Éditeur', lecteur: 'Lecteur', membre: 'Membre' };
+const ROLE_LABEL = { admin: 'Administrateur', manager: 'Manager', commercial: 'Commercial', direction: 'Direction', responsable: 'Responsable', editeur: 'Éditeur', lecteur: 'Lecteur', membre: 'Membre' };
 const POLE_LABEL = { commercial: 'Commercial', logistique: 'Logistique', pilotage: 'Pilotage', communication: 'Communication', comptable: 'Comptabilité' };
 const POLE_FILTER_FROM = 9; // décision du 24/11 : filtre par pôle seulement au-delà de 8 outils
 

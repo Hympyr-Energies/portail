@@ -78,8 +78,13 @@ async function creer(par: { id: string; email: string }, c: any) {
   const acces = Array.isArray(c.acces) ? c.acces : [];
 
   const r = await serveur("auth/v1", "/admin/users", { method: "POST", body: JSON.stringify({ email, password: c.password, email_confirm: true }) });
-  if (r.status === 422 || r.status === 409) throw new Refus(409, "existe", "Un compte existe déjà avec cette adresse.");
-  if (!r.ok) throw new Refus(502, "auth", "Création du compte refusée par Supabase.");
+  if (!r.ok) {
+    const e = await r.json().catch(() => ({}));
+    const m = String(e?.msg ?? e?.message ?? "");
+    if (e?.error_code === "email_exists" || /already (been )?registered|already exists/i.test(m)) throw new Refus(409, "existe", "Un compte existe déjà avec cette adresse.");
+    if (e?.error_code === "weak_password" || /password/i.test(m)) throw new Refus(422, "mdp", m || "Mot de passe refusé par Supabase.");
+    throw new Refus(502, "auth", "Création du compte refusée par Supabase.");
+  }
   const user_id = (await r.json()).id as string;
 
   // Fiche : « merge » car un trigger peut l'avoir déjà créée si la personne figurait dans un outil

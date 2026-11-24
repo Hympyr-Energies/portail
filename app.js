@@ -429,7 +429,7 @@ function editHTML(c, isNew) {
     const opts = `<option value="">Aucun accès</option>` + o.roles_possibles.map(r => `<option value="${esc(r)}" ${a.role === r ? 'selected' : ''}>${esc(ROLE_LABEL[r] || r)}</option>`).join('');
     return `<div class="adm-acl-row"><b>${esc(o.nom)}</b>
       <select class="input" data-acl="${esc(o.slug)}" aria-label="Rôle pour ${esc(o.nom)}">${opts}</select>
-      <input class="input" type="date" data-exp="${esc(o.slug)}" value="${a.expire_le ? a.expire_le.slice(0, 10) : ''}" aria-label="Fin d'accès à ${esc(o.nom)} (facultatif)"></div>`;
+      <input class="input" type="date" data-exp="${esc(o.slug)}" value="${a.expire_le ? a.expire_le.slice(0, 10) : ''}" ${a.role ? '' : 'disabled'} aria-label="Fin d'accès à ${esc(o.nom)} (facultatif)"></div>`;
   }).join('');
   const moi = c.user_id === S.user.id, creation = !!c.creation;
   const titre = creation ? 'Nouveau collaborateur' : isNew ? c.email : nomCollab(c);
@@ -475,6 +475,7 @@ function openEdit(c, isNew) {
   ov.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 320, easing: EASE });
   m.animate([{ opacity: 0, transform: 'translateY(18px) scale(.97)' }, { opacity: 1, transform: 'none' }], { duration: 480, easing: EASE });
   $('#admForm').onsubmit = e => { e.preventDefault(); c.creation ? createUser() : saveEdit(c, isNew); };
+  $$('[data-acl]').forEach(sel => sel.onchange = () => { const d = $(`[data-exp="${sel.dataset.acl}"]`); d.disabled = !sel.value; if (!sel.value) d.value = ''; });
   const rg = $('[data-regen]'); if (rg) rg.onclick = () => { $('#aPwd').value = genMdp(); };
   const pr = $('[data-pwd-reset]'); if (pr) pr.onclick = () => resetPwd(c, pr);
   const dl = $('[data-delete]'); if (dl) dl.onclick = () => deleteUser(c, dl);
@@ -482,18 +483,31 @@ function openEdit(c, isNew) {
 }
 
 /* --- actions sur les comptes de connexion : fonction serveur « portail-admin » (clé serveur côté Supabase uniquement) --- */
+/* Politique Supabase du projet : au moins une minuscule, une majuscule, un chiffre et un symbole.
+   Caractères ambigus exclus (0/O, 1/l/I) et symboles faciles à dicter. */
+const MDP_CLASSES = ['abcdefghijkmnpqrstuvwxyz', 'ABCDEFGHJKLMNPQRSTUVWXYZ', '23456789', '!#%+=?@'];
+const MDP_REGLE = '10 caractères minimum, avec une minuscule, une majuscule, un chiffre et un symbole';
+function mdpValide(m) { return m.length >= 10 && /[a-z]/.test(m) && /[A-Z]/.test(m) && /\d/.test(m) && /[^A-Za-z0-9]/.test(m); }
 function genMdp(n = 14) {
-  const abc = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';   // sans 0/O, 1/l/I : dictable sans erreur
-  const v = crypto.getRandomValues(new Uint32Array(n));
-  let m = Array.from(v, x => abc[x % abc.length]).join('');
-  if (!/\d/.test(m)) m = m.slice(0, -1) + '7';
-  return m;
+  const tire = k => k[crypto.getRandomValues(new Uint32Array(1))[0] % k.length];
+  const tous = MDP_CLASSES.join('');
+  const c = [...MDP_CLASSES.map(tire), ...Array.from({ length: n - MDP_CLASSES.length }, () => tire(tous))];
+  for (let i = c.length - 1; i > 0; i--) { const j = crypto.getRandomValues(new Uint32Array(1))[0] % (i + 1); [c[i], c[j]] = [c[j], c[i]]; }
+  return c.join('');
+}
+/* Messages d'erreur Supabase sur les mots de passe, en français */
+function mdpErreur(m) {
+  m = String(m || '');
+  if (/at least one character|should contain/i.test(m)) return `Mot de passe refusé : ${MDP_REGLE}.`;
+  if (/different|same/i.test(m)) return 'Choisissez un mot de passe différent de l\'actuel.';
+  if (/weak|pwned|leaked|characters/i.test(m)) return `Mot de passe trop faible : ${MDP_REGLE}.`;
+  return '';
 }
 async function adminCall(action, corps) {
   const { data, error } = await sb.functions.invoke('portail-admin', { body: { action, ...corps } });
   if (!error) return data;
   let msg = 'Action impossible pour le moment. Réessayez.';
-  try { const j = await error.context.json(); if (j && j.message) msg = j.message; } catch (e) {}
+  try { const j = await error.context.json(); if (j && j.message) msg = mdpErreur(j.message) || j.message; } catch (e) {}
   if (/Failed to send|fetch/i.test(error.message || '') && msg.startsWith('Action')) msg = 'Service d\'administration injoignable. Vérifiez votre connexion.';
   throw new Error(msg);
 }
@@ -520,7 +534,7 @@ async function createUser() {
   const err = $('#aErr'), btn = $('#aSave'), email = $('#aEmail').value.trim().toLowerCase(), mdp = $('#aPwd').value.trim();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setMsg(err, 'Saisissez une adresse e-mail valide.'); $('#aEmail').focus(); return; }
   if (A.collab.some(c => c.email === email)) { setMsg(err, 'Cette adresse a déjà une fiche dans le portail.'); return; }
-  if (mdp.length < 10) { setMsg(err, 'Le mot de passe temporaire doit contenir 10 caractères minimum.'); return; }
+  if (!mdpValide(mdp)) { setMsg(err, `Mot de passe temporaire : ${MDP_REGLE}. Cliquez sur le bouton à côté pour en générer un.`); return; }
   const acces = aclChoisis();
   if (!acces.length) { setMsg(err, 'Attribuez au moins un outil.'); return; }
   btn.disabled = true; btn.lastChild.textContent = 'Création en cours';
@@ -688,22 +702,20 @@ $('#forgotBtn').onclick = async () => {
 // Lien « mot de passe oublié » : on arrive directement sur la saisie du nouveau mot de passe (charte)
 $('#resetForm').addEventListener('submit', async e => {
   e.preventDefault(); const p = $('#newPassword'), msg = $('#resetMsg');
-  if (p.value.length < 10) { setMsg(msg, 'Choisissez un mot de passe de 10 caractères minimum.'); return; }
+  if (!mdpValide(p.value)) { setMsg(msg, `Choisissez un mot de passe de ${MDP_REGLE}.`); return; }
   const { error } = await sb.auth.updateUser({ password: p.value });
-  if (error) { setMsg(msg, /different|same/i.test(error.message) ? 'Choisissez un mot de passe différent du mot de passe temporaire.'
-    : /weak|pwned|leaked/i.test(error.message) ? 'Ce mot de passe est trop faible. Choisissez-en un autre.'
-    : S.forceMdp ? 'Mise à jour impossible pour le moment. Réessayez.' : 'Mise à jour impossible. Demandez un nouveau lien de réinitialisation.'); return; }
+  if (error) { setMsg(msg, mdpErreur(error.message) || (S.forceMdp ? 'Mise à jour impossible pour le moment. Réessayez.' : 'Mise à jour impossible. Demandez un nouveau lien de réinitialisation.')); return; }
   if (S.forceMdp) { await sb.rpc('portail_mdp_change'); S.forceMdp = false; $('#loginTitle').textContent = 'Portail Hympyr'; }
   p.value = ''; $('#resetForm').hidden = true; $('#loginForm').hidden = false; $('#forgotBtn').parentElement.hidden = false;
   const { data } = await sb.auth.getSession(); if (data.session) enterApp(data.session, { fresh: true });
 });
 $('#pwdForm').addEventListener('submit', async e => {
   e.preventDefault(); const p = $('#pwdNew'), msg = $('#pwdMsg');
-  if (p.value.length < 10) { setMsg(msg, 'Choisissez un mot de passe de 10 caractères minimum.'); return; }
+  if (!mdpValide(p.value)) { setMsg(msg, `Choisissez un mot de passe de ${MDP_REGLE}.`); return; }
   $('#pwdBtn').disabled = true;
   const { error } = await sb.auth.updateUser({ password: p.value });
   $('#pwdBtn').disabled = false;
-  if (error) { setMsg(msg, /weak|pwned|leaked/i.test(error.message) ? 'Ce mot de passe est trop faible ou figure dans une fuite connue. Choisissez-en un autre.' : 'Mise à jour impossible pour le moment.'); return; }
+  if (error) { setMsg(msg, mdpErreur(error.message) || 'Mise à jour impossible pour le moment.'); return; }
   sb.rpc('portail_mdp_change').then(() => {}, () => {});
   p.value = ''; setMsg(msg, 'Mot de passe enregistré pour tous vos outils.', 'ok');
 });

@@ -318,7 +318,25 @@ addEventListener('keydown', e => { if (e.key === 'Escape') closeTicket(); });
 /* =========================================================
    CONNEXION
    ========================================================= */
+/* Paramètre ?retour= : posé par un outil qui renvoie vers le portail faute de session.
+   Garde-fou contre la redirection ouverte : on n'y retourne que si l'URL commence par celle d'un outil
+   autorisé pour cette personne (même origine et même chemin de base). */
+function outilDeRetour() {
+  const brut = new URLSearchParams(location.search).get('retour');
+  if (!brut) return null;
+  let u; try { u = new URL(brut, location.href); } catch (e) { return { outil: null }; }
+  if (u.protocol !== 'https:' && u.hostname !== 'localhost') return { outil: null };
+  const outil = S.outils.find(o => { try { const b = new URL(o.url); return u.origin === b.origin && u.pathname.startsWith(b.pathname); } catch (e) { return false; } });
+  return { outil, url: u.href };
+}
+function nomOutilDeRetour() {
+  const brut = new URLSearchParams(location.search).get('retour'); if (!brut) return '';
+  const slug = new URLSearchParams(location.search).get('outil') || '';
+  return { cockpit_appels: 'le cockpit appels', cockpit_granules: 'le cockpit granulés', renommage_tournees: 'le renommage des tournées', pilotage_communication: 'le pilotage communication', charte: 'la charte graphique' }[slug] || 'votre outil';
+}
 function showLogin() {
+  const n = nomOutilDeRetour();
+  if (n) $('#loginLead').textContent = `Connectez-vous pour ouvrir ${n}. Le même compte vaut pour tous les outils Hympyr.`;
   renderLogos();
   $('#app').hidden = true; $('#login').hidden = false;
   $('#loginCard').animate([{ opacity: 0, transform: 'translateY(16px) scale(.98)' }, { opacity: 1, transform: 'none' }], { duration: 620, easing: EASE });
@@ -337,6 +355,14 @@ async function enterApp(session, { fresh = false } = {}) {
   // Une ligne « connexion » par jour et par appareil suffit pour mesurer l'adoption
   const today = new Date().toISOString().slice(0, 10), k = 'hy-portail-cx-' + S.user.id;
   if (fresh || store.get(k, '') !== today) { store.set(k, today); journal('connexion'); }
+
+  // Retour vers l'outil qui a renvoyé ici (?retour=…), seulement s'il fait partie des outils autorisés
+  const cible = outilDeRetour();
+  if (cible) {
+    if (cible.outil) { await journal('ouverture_outil', cible.outil.slug); location.replace(cible.url); return; }
+    toast("Vous n'avez pas accès à cet outil. Demandez un accès avec le bouton ticket.", 'x');
+  }
+  history.replaceState(null, '', location.pathname + location.hash);
 
   const l = $('#login');
   if (!l.hidden) { await $('#loginCard').animate([{ opacity: 1 }, { opacity: 0, transform: 'translateY(-10px) scale(.98)' }], { duration: 240, fill: 'forwards' }).done; l.hidden = true; $('#loginCard').getAnimations().forEach(a => a.cancel()); }

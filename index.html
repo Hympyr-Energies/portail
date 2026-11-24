@@ -26,6 +26,10 @@
     <span class="sh square" style="--c:#286ACB;background:var(--c);width:28vmax;height:28vmax;right:-6vmax;top:18vh;--dx:-50px;--dy:50px;--rot:30deg"></span>
     <span class="sh circle" style="--c:#CB7A28;background:var(--c);width:30vmax;height:30vmax;left:30vw;bottom:-20vmax;--dx:40px;--dy:-60px"></span>
   </div>
+  <div class="scene" data-scene="admin">
+    <span class="sh square" style="--c:var(--soft);width:34vmax;height:34vmax;left:-10vmax;top:-8vmax;--dx:40px;--dy:30px;--rot:20deg"></span>
+    <span class="sh circle" style="--c:#286ACB;background:var(--c);width:26vmax;height:26vmax;right:-8vmax;bottom:-8vmax;--dx:-40px;--dy:-30px"></span>
+  </div>
   <div class="scene" data-scene="compte">
     <span class="sh ring" style="--c:var(--soft);width:44vmax;height:44vmax;right:-14vmax;top:-12vmax;--dx:-40px;--dy:40px"></span>
     <span class="sh circle" style="--c:var(--action);background:var(--c);width:28vmax;height:28vmax;left:-6vmax;bottom:-6vmax;--dx:60px;--dy:-30px"></span>
@@ -109,11 +113,25 @@
           <button class="btn mag" type="submit" id="pwdBtn">Enregistrer</button>
         </form>
       </div>
+      <div class="card glass account" data-st id="accAdmin" hidden>
+        <h3>Administration</h3>
+        <p class="muted">Gérer les collaborateurs, leurs outils et leurs rôles, et traiter les tickets.</p>
+        <button class="btn ghost mag" type="button" data-tab-go="admin" style="margin-top:16px">Ouvrir l'administration</button>
+      </div>
       <div class="card glass account" data-st>
         <h3>Se déconnecter</h3>
         <p class="muted">La déconnexion ferme aussi la charte et le pilotage communication sur cet appareil.</p>
         <button class="btn ghost mag" type="button" id="logoutBtn2" style="margin-top:16px">Se déconnecter</button>
       </div>
+    </section>
+    <!-- ADMINISTRATION (administrateurs du portail uniquement ; la base refuse tout le reste) -->
+    <section class="view" id="v-admin" data-view="admin" hidden>
+      <div class="page-head glass" data-st>
+        <div class="txt"><span class="label">Administration</span><h1 style="margin-top:8px">Accès aux outils</h1>
+          <p>Un collaborateur, des outils, un rôle par outil. Chaque modification est recopiée dans l'outil concerné.</p></div>
+        <div class="seg glass glide" id="admSeg" role="tablist" aria-label="Rubrique d'administration"></div>
+      </div>
+      <div id="admBody" aria-live="polite"></div>
     </section>
   </main>
 

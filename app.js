@@ -45,14 +45,15 @@ const I = {
   arrow: '<path d="M5 12h14M13 6l6 6-6 6"/>',
   check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
   x: '<path d="M6 6l12 12M18 6 6 18"/>',
-  send: '<path d="M21 3 10 14M21 3l-7 18-4-7-7-4z"/>'
+  send: '<path d="M21 3 10 14M21 3l-7 18-4-7-7-4z"/>',
+  shield: '<path d="M12 3 4 6v6c0 4.5 3.4 8.2 8 9 4.6-.8 8-4.5 8-9V6z"/><path d="m9 12 2 2 4-4"/>'
 };
 const ic = (n, cls = 'i') => `<svg class="${cls}" viewBox="0 0 24 24" aria-hidden="true">${I[n] || I.tool}</svg>`;
 // Icône par outil ; un outil ajouté au catalogue sans entrée ici prend l'icône générique
 // Libellé court pour la barre mobile (11 px, une ligne)
 const TOOL_SHORT = { cockpit_appels: 'Appels', cockpit_granules: 'Granulés', renommage_tournees: 'Tournées', pilotage_communication: 'Com', charte: 'Charte' };
 const TOOL_ICON = { cockpit_appels: 'phone', cockpit_granules: 'calc', renommage_tournees: 'file', pilotage_communication: 'calendar', charte: 'palette' };
-const ROLE_LABEL = { admin: 'Administrateur', manager: 'Manager', commercial: 'Commercial', direction: 'Direction', editeur: 'Éditeur', lecteur: 'Lecteur', membre: 'Membre' };
+const ROLE_LABEL = { admin: 'Administrateur', manager: 'Manager', commercial: 'Commercial', direction: 'Direction', responsable: 'Responsable', editeur: 'Éditeur', lecteur: 'Lecteur', membre: 'Membre' };
 const POLE_LABEL = { commercial: 'Commercial', logistique: 'Logistique', pilotage: 'Pilotage', communication: 'Communication', comptable: 'Comptabilité' };
 const POLE_FILTER_FROM = 9; // décision du 24/11 : filtre par pôle seulement au-delà de 8 outils
 
@@ -145,7 +146,7 @@ function renderLogos() { $$('[data-logo]').forEach(l => { l.innerHTML = logoHTML
 /* =========================================================
    DONNÉES
    ========================================================= */
-const S = { user: null, nom: '', outils: [], usage: {}, view: 'outils', pole: 'tous' };
+const S = { user: null, nom: '', outils: [], usage: {}, view: 'outils', pole: 'tous', admin: false };
 
 async function loadOutils() {
   const { data, error } = await sb.rpc('portail_mes_outils');
@@ -157,6 +158,10 @@ async function loadMoi() {
   return (data && data[0] && data[0].nom) || '';
 }
 /* Ouvertures des 30 derniers jours : sert à classer les raccourcis mobiles et aux chiffres de l'accueil */
+async function loadAdminFlag() {
+  const { data } = await sb.rpc('portail_est_admin');
+  return data === true;
+}
 async function loadUsage() {
   const depuis = new Date(Date.now() - 30 * 864e5).toISOString();
   const { data, error } = await sb.from('portail_journal').select('outil_slug,le').eq('evenement', 'ouverture_outil').gte('le', depuis);
@@ -217,14 +222,16 @@ function renderAccount() {
   $('#accName').textContent = S.nom || prenom();
   $('#accEmail').textContent = S.user.email;
   $('#accRoles').innerHTML = S.outils.map(o => `<span class="pill">${esc(o.nom)} · ${esc(ROLE_LABEL[o.role] || o.role)}</span>`).join('');
+  $('#accAdmin').hidden = !S.admin;
 }
 
 /* Navigation : 2 onglets sur ordinateur ; sur mobile, barre de 5 icônes max (charte, Créations > Outils) :
    les outils les plus ouverts autour de l'accueil central mis en avant, puis Mon compte */
 const TABS = [{ k: 'outils', l: 'Mes outils', i: 'grid' }, { k: 'compte', l: 'Mon compte', i: 'user' }];
+const tabsVisibles = () => S.admin ? [...TABS, { k: 'admin', l: 'Administration', i: 'shield' }] : TABS;
 function renderNav() {
   const tabs = $('#tabs');
-  tabs.innerHTML = TABS.map(t => `<button type="button" data-tab="${t.k}" class="${t.k === S.view ? 'on' : ''}" aria-current="${t.k === S.view ? 'page' : 'false'}">${ic(t.i)}<span>${t.l}</span></button>`).join('');
+  tabs.innerHTML = tabsVisibles().map(t => `<button type="button" data-tab="${t.k}" class="${t.k === S.view ? 'on' : ''}" aria-current="${t.k === S.view ? 'page' : 'false'}">${ic(t.i)}<span>${t.l}</span></button>`).join('');
   tabs._ind = null; tabs._glide = false; setupInd(tabs); setupGlide(tabs);
   requestAnimationFrame(() => place(tabs._ind, $('button.on', tabs), true));
   tabs.onclick = e => { const b = e.target.closest('button[data-tab]'); if (b) go(b.dataset.tab); };
@@ -251,6 +258,7 @@ async function go(view) {
   await from.animate([{ opacity: 1 }, { opacity: 0, transform: `translateY(${RM ? 0 : -6}px)` }], { duration: 180, easing: 'cubic-bezier(.4,0,1,1)', fill: 'forwards' }).done;
   from.hidden = true; from.getAnimations().forEach(a => a.cancel());
   to.hidden = false; scrollTo({ top: 0, behavior: 'instant' }); stagger(to);
+  if (view === 'admin') openAdmin();
 }
 
 /* Ouverture d'un outil : on journalise puis on navigue dans le même onglet (Ctrl/Cmd+clic : nouvel onglet) */
@@ -283,7 +291,7 @@ function ticketFormHTML() {
 function openTicket(type) {
   if (type) ticketType = type;
   const ov = $('#ticketOverlay'), m = $('#ticketModal');
-  m.innerHTML = ticketFormHTML(); ov.hidden = false;
+  m.classList.remove('wide'); m.innerHTML = ticketFormHTML(); ov.hidden = false;
   seg($('#ticketSeg'), [['question', 'Question'], ['erreur', 'Erreur'], ['suggestion', 'Suggestion'], ['acces', 'Accès']], ticketType, v => { ticketType = v; });
   ov.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 320, easing: EASE });
   m.animate([{ opacity: 0, transform: 'translateY(18px) scale(.97)' }, { opacity: 1, transform: 'none' }], { duration: 480, easing: EASE });
@@ -316,9 +324,202 @@ $('#ticketOverlay').addEventListener('click', e => { if (e.target.id === 'ticket
 addEventListener('keydown', e => { if (e.key === 'Escape') closeTicket(); });
 
 /* =========================================================
+   ADMINISTRATION (administrateurs du portail)
+   La sécurité est en base : RLS sur portail_collaborateurs / portail_acces, fonction portail_admin_comptes().
+   On désactive un collaborateur, on ne le supprime jamais (la suppression ne serait pas recopiée dans les outils).
+   ========================================================= */
+const TICKET_TYPE = { question: 'Question', erreur: 'Erreur', suggestion: 'Suggestion', acces: 'Accès' };
+const TICKET_STATUT = [['ouvert', 'Ouvert'], ['en_cours', 'En cours'], ['resolu', 'Résolu']];
+const A = { tab: 'acces', q: '', collab: [], acces: [], outils: [], comptes: [], tickets: [], comptesOk: true, loaded: false };
+const dCourt = v => v ? new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(v)) : '';
+const nomCollab = c => [c.prenom, c.nom].filter(Boolean).join(' ') || c.email.split('@')[0];
+
+async function loadAdmin() {
+  const [co, ac, ou, cp, tk] = await Promise.all([
+    sb.from('portail_collaborateurs').select('*'),
+    sb.from('portail_acces').select('*'),
+    sb.from('portail_outils').select('slug,nom,roles_possibles,ordre,statut').order('ordre'),
+    sb.rpc('portail_admin_comptes'),
+    sb.from('portail_tickets').select('*').order('cree_le', { ascending: false }).limit(200)
+  ]);
+  if (co.error || ac.error || ou.error) throw (co.error || ac.error || ou.error);
+  A.collab = co.data; A.acces = ac.data; A.outils = ou.data.filter(o => o.statut !== 'archive');
+  A.comptesOk = !cp.error; A.comptes = cp.data || [];
+  A.tickets = tk.data || []; A.loaded = true;
+}
+async function openAdmin() {
+  const body = $('#admBody');
+  if (!A.loaded) body.innerHTML = `<div class="adm-empty glass">Chargement…</div>`;
+  try { await loadAdmin(); } catch (e) { body.innerHTML = `<div class="adm-empty glass">Chargement impossible. Rechargez la page.</div>`; return; }
+  const ouverts = A.tickets.filter(t => t.statut !== 'resolu').length;
+  seg($('#admSeg'), [['acces', 'Collaborateurs'], ['tickets', `Tickets${ouverts ? ' (' + ouverts + ')' : ''}`]], A.tab, v => { A.tab = v; renderAdmin(); });
+  renderAdmin();
+}
+function renderAdmin() {
+  const body = $('#admBody');
+  body.innerHTML = A.tab === 'tickets' ? ticketsAdminHTML() : accesAdminHTML();
+  const q = $('#admQ'); if (q) { q.value = A.q; q.oninput = () => { A.q = q.value; $('#admList').innerHTML = collabRowsHTML(); }; }
+  stagger(body);
+}
+function collabRowsHTML() {
+  const q = A.q.trim().toLowerCase();
+  const list = A.collab.filter(c => !q || (nomCollab(c) + ' ' + c.email + ' ' + (c.pole || '')).toLowerCase().includes(q))
+    .sort((a, b) => (b.actif - a.actif) || nomCollab(a).localeCompare(nomCollab(b), 'fr'));
+  if (!list.length) return `<div class="adm-empty glass">Aucun collaborateur ne correspond.</div>`;
+  const vu = Object.fromEntries(A.comptes.map(c => [c.user_id, c.derniere_connexion]));
+  return list.map(c => {
+    const acc = A.outils.map(o => [o, A.acces.find(a => a.user_id === c.user_id && a.outil_slug === o.slug)]).filter(x => x[1]);
+    const chips = acc.length ? acc.map(([o, a]) => `<span class="pill">${esc(o.nom)} · ${esc(ROLE_LABEL[a.role] || a.role)}${a.expire_le ? ' · jusqu\'au ' + esc(dCourt(a.expire_le)) : ''}</span>`).join('')
+      : `<span class="pill none">Aucun outil</span>`;
+    const meta = [POLE_LABEL[c.pole] || c.pole, c.admin_portail ? 'Administrateur du portail' : '', !c.actif ? 'Désactivé' : '',
+      vu[c.user_id] ? 'Vu le ' + dCourt(vu[c.user_id]) : (A.comptesOk ? 'Jamais connecté' : '')].filter(Boolean).join(' · ');
+    return `<div class="adm-row glass ${c.actif ? '' : 'off'}" data-st>
+      <div class="adm-who"><b>${esc(nomCollab(c))}</b><span>${esc(c.email)}</span><span class="adm-meta">${esc(meta)}</span></div>
+      <div class="adm-acc">${chips}</div>
+      <button class="btn ghost sm mag" type="button" data-edit="${esc(c.user_id)}">Modifier</button>
+    </div>`;
+  }).join('');
+}
+function accesAdminHTML() {
+  const rattaches = new Set(A.collab.map(c => c.user_id));
+  const libres = A.comptes.filter(c => !rattaches.has(c.user_id));
+  const libresHTML = !A.comptesOk
+    ? `<div class="adm-empty glass">Liste des comptes indisponible : exécutez le fichier SQL « 5_ecran_administration.sql » dans Supabase.</div>`
+    : libres.length ? `<div class="adm-list">${libres.map(c => `<div class="adm-row glass" data-st>
+        <div class="adm-who"><b>${esc(c.email)}</b><span class="adm-meta">Compte créé le ${esc(dCourt(c.cree_le))}${c.confirme ? '' : ' · invitation non acceptée'}</span></div>
+        <div class="adm-acc"><span class="pill none">Pas encore dans le portail</span></div>
+        <button class="btn sm mag" type="button" data-add="${esc(c.user_id)}">Ajouter</button></div>`).join('')}</div>`
+    : `<div class="adm-empty glass">Tous les comptes sont rattachés au portail.</div>`;
+  return `<div class="adm-tools" data-st>
+      <input class="input" id="admQ" type="search" placeholder="Rechercher un nom, une adresse, un pôle" aria-label="Rechercher un collaborateur">
+      <span class="muted" style="font-size:13px">${A.collab.filter(c => c.actif).length} collaborateurs actifs</span>
+    </div>
+    <div class="adm-list" id="admList">${collabRowsHTML()}</div>
+    <div class="adm-sec">
+      <h3 data-st>Nouveaux comptes</h3>
+      <p data-st>Pour ajouter quelqu'un : Supabase, Authentication, Users, « Invite user » avec son adresse professionnelle. Son compte apparaît alors ici : cliquez sur « Ajouter » et choisissez ses outils.</p>
+      ${libresHTML}
+    </div>`;
+}
+function ticketsAdminHTML() {
+  if (!A.tickets.length) return `<div class="adm-empty glass" data-st>Aucun ticket pour l'instant.</div>`;
+  const nomOutil = s => (A.outils.find(o => o.slug === s) || {}).nom || 'Portail';
+  return `<div class="adm-list">${A.tickets.map(t => `<div class="tk-row glass" data-st>
+      <div><div class="tk-meta"><span class="pill ${t.type === 'erreur' ? 'warn' : ''}">${esc(TICKET_TYPE[t.type] || t.type)}</span>
+        <span>${esc(nomOutil(t.outil_slug))} · ${esc(t.auteur_email || '')} · ${esc(dCourt(t.cree_le))}</span></div>
+        <h4>${esc(t.sujet)}</h4><p>${esc(t.message)}</p></div>
+      <label class="field"><span>Statut</span><select class="input" data-ticket-statut="${t.id}">
+        ${TICKET_STATUT.map(([v, l]) => `<option value="${v}" ${v === t.statut ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+    </div>`).join('')}</div>`;
+}
+
+/* --- fiche collaborateur (création ou modification) --- */
+function editHTML(c, isNew) {
+  const poles = Object.entries(POLE_LABEL).map(([v, l]) => `<option value="${v}" ${c.pole === v ? 'selected' : ''}>${l}</option>`).join('');
+  const lignes = A.outils.map(o => {
+    const a = A.acces.find(x => x.user_id === c.user_id && x.outil_slug === o.slug) || {};
+    const opts = `<option value="">Aucun accès</option>` + o.roles_possibles.map(r => `<option value="${esc(r)}" ${a.role === r ? 'selected' : ''}>${esc(ROLE_LABEL[r] || r)}</option>`).join('');
+    return `<div class="adm-acl-row"><b>${esc(o.nom)}</b>
+      <select class="input" data-acl="${esc(o.slug)}" aria-label="Rôle pour ${esc(o.nom)}">${opts}</select>
+      <input class="input" type="date" data-exp="${esc(o.slug)}" value="${a.expire_le ? a.expire_le.slice(0, 10) : ''}" aria-label="Fin d'accès à ${esc(o.nom)} (facultatif)"></div>`;
+  }).join('');
+  const moi = c.user_id === S.user.id;
+  return `<div class="modal-head"><div><span class="label">${isNew ? 'Nouveau collaborateur' : 'Collaborateur'}</span>
+      <h2 id="ticketTitle" style="margin-top:6px">${esc(isNew ? c.email : nomCollab(c))}</h2><p>${esc(c.email)}</p></div>
+      <button class="icon-btn" data-close aria-label="Fermer">${ic('x')}</button></div>
+    <form class="form" id="admForm" novalidate>
+      <div class="adm-grid">
+        <label class="field"><span>Prénom</span><input class="input" id="aPrenom" maxlength="60" value="${esc(c.prenom || '')}"></label>
+        <label class="field"><span>Nom</span><input class="input" id="aNom" maxlength="60" value="${esc(c.nom || '')}"></label>
+        <label class="field"><span>Pôle</span><select class="input" id="aPole"><option value="">Non renseigné</option>${poles}</select></label>
+      </div>
+      <div class="adm-checks">
+        <label><input type="checkbox" id="aActif" ${c.actif !== false ? 'checked' : ''} ${moi ? 'disabled' : ''}> Compte actif</label>
+        <label><input type="checkbox" id="aAdmin" ${c.admin_portail ? 'checked' : ''} ${moi ? 'disabled' : ''}> Administrateur du portail</label>
+      </div>
+      ${moi ? '<p class="muted" style="font-size:13px">Vous ne pouvez pas retirer vos propres droits d\'administrateur.</p>' : ''}
+      <div class="field"><span>Outils et rôles</span>
+        <div class="adm-acl-head"><span>Outil</span><span>Rôle</span><span>Fin d'accès (facultatif)</span></div>
+        <div class="adm-acl">${lignes}</div></div>
+      <p class="msg" id="aErr" role="alert"></p>
+      <button class="btn block mag" type="submit" id="aSave">${ic('check')}<span>Enregistrer</span></button>
+    </form>`;
+}
+function openEdit(c, isNew) {
+  const ov = $('#ticketOverlay'), m = $('#ticketModal');
+  m.classList.add('wide'); m.innerHTML = editHTML(c, isNew); ov.hidden = false;
+  ov.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 320, easing: EASE });
+  m.animate([{ opacity: 0, transform: 'translateY(18px) scale(.97)' }, { opacity: 1, transform: 'none' }], { duration: 480, easing: EASE });
+  $('#admForm').onsubmit = e => { e.preventDefault(); saveEdit(c, isNew); };
+}
+async function saveEdit(c, isNew) {
+  const err = $('#aErr'), btn = $('#aSave');
+  const fiche = {
+    prenom: $('#aPrenom').value.trim() || null, nom: $('#aNom').value.trim() || null, pole: $('#aPole').value || null,
+    actif: $('#aActif').checked, admin_portail: $('#aAdmin').checked
+  };
+  btn.disabled = true; btn.lastChild.textContent = 'Enregistrement';
+  const fail = (e) => { btn.disabled = false; btn.lastChild.textContent = 'Enregistrer';
+    setMsg(err, /administrateur actif/.test(e?.message || '') ? 'Il doit rester au moins un administrateur actif du portail.'
+      : /inconnu/.test(e?.message || '') ? e.message : 'Enregistrement impossible. Vérifiez votre connexion puis réessayez.'); };
+  // 1. la fiche
+  const r1 = isNew
+    ? await sb.from('portail_collaborateurs').insert({ user_id: c.user_id, email: c.email, ...fiche })
+    : await sb.from('portail_collaborateurs').update(fiche).eq('user_id', c.user_id);
+  if (r1.error) return fail(r1.error);
+  // 2. les droits, outil par outil (chaque ligne est recopiée dans l'outil par la base)
+  for (const o of A.outils) {
+    const role = $(`[data-acl="${o.slug}"]`).value, d = $(`[data-exp="${o.slug}"]`).value;
+    const expire_le = d ? new Date(d + 'T23:59:59').toISOString() : null;
+    const avant = A.acces.find(x => x.user_id === c.user_id && x.outil_slug === o.slug);
+    let r = { error: null };
+    if (!role && avant) r = await sb.from('portail_acces').delete().eq('user_id', c.user_id).eq('outil_slug', o.slug);
+    else if (role && !avant) r = await sb.from('portail_acces').insert({ user_id: c.user_id, outil_slug: o.slug, role, expire_le });
+    else if (role && avant && (avant.role !== role || (avant.expire_le || '').slice(0, 10) !== d))
+      r = await sb.from('portail_acces').update({ role, expire_le }).eq('user_id', c.user_id).eq('outil_slug', o.slug);
+    if (r.error) return fail(r.error);
+  }
+  await closeTicket(); $('#ticketModal').classList.remove('wide');
+  toast(isNew ? 'Collaborateur ajouté au portail' : 'Modifications enregistrées');
+  openAdmin();
+}
+document.addEventListener('click', e => {
+  const ed = e.target.closest('[data-edit]');
+  if (ed) { const c = A.collab.find(x => x.user_id === ed.dataset.edit); if (c) openEdit(c, false); return; }
+  const ad = e.target.closest('[data-add]');
+  if (ad) { const c = A.comptes.find(x => x.user_id === ad.dataset.add); if (c) openEdit({ user_id: c.user_id, email: c.email, actif: true }, true); return; }
+  const tg = e.target.closest('[data-tab-go]'); if (tg) go(tg.dataset.tabGo);
+});
+document.addEventListener('change', async e => {
+  const s = e.target.closest('[data-ticket-statut]'); if (!s) return;
+  const { error } = await sb.from('portail_tickets').update({ statut: s.value }).eq('id', +s.dataset.ticketStatut);
+  if (error) { toast('Statut non enregistré. Réessayez.', 'x'); return; }
+  const t = A.tickets.find(x => x.id === +s.dataset.ticketStatut); if (t) t.statut = s.value;
+  toast('Statut du ticket mis à jour');
+});
+
+/* =========================================================
    CONNEXION
    ========================================================= */
+/* Paramètre ?retour= : posé par un outil qui renvoie vers le portail faute de session.
+   Garde-fou contre la redirection ouverte : on n'y retourne que si l'URL commence par celle d'un outil
+   autorisé pour cette personne (même origine et même chemin de base). */
+function outilDeRetour() {
+  const brut = new URLSearchParams(location.search).get('retour');
+  if (!brut) return null;
+  let u; try { u = new URL(brut, location.href); } catch (e) { return { outil: null }; }
+  if (u.protocol !== 'https:' && u.hostname !== 'localhost') return { outil: null };
+  const outil = S.outils.find(o => { try { const b = new URL(o.url); return u.origin === b.origin && u.pathname.startsWith(b.pathname); } catch (e) { return false; } });
+  return { outil, url: u.href };
+}
+function nomOutilDeRetour() {
+  const brut = new URLSearchParams(location.search).get('retour'); if (!brut) return '';
+  const slug = new URLSearchParams(location.search).get('outil') || '';
+  return { cockpit_appels: 'le cockpit appels', cockpit_granules: 'le cockpit granulés', renommage_tournees: 'le renommage des tournées', pilotage_communication: 'le pilotage communication', charte: 'la charte graphique' }[slug] || 'votre outil';
+}
 function showLogin() {
+  const n = nomOutilDeRetour();
+  if (n) $('#loginLead').textContent = `Connectez-vous pour ouvrir ${n}. Le même compte vaut pour tous les outils Hympyr.`;
   renderLogos();
   $('#app').hidden = true; $('#login').hidden = false;
   $('#loginCard').animate([{ opacity: 0, transform: 'translateY(16px) scale(.98)' }, { opacity: 1, transform: 'none' }], { duration: 620, easing: EASE });
@@ -326,11 +527,11 @@ function showLogin() {
 async function enterApp(session, { fresh = false } = {}) {
   S.user = session.user;
   try {
-    [S.outils, S.nom, S.usage] = await Promise.all([loadOutils(), loadMoi(), loadUsage()]);
+    [S.outils, S.nom, S.usage, S.admin] = await Promise.all([loadOutils(), loadMoi(), loadUsage(), loadAdminFlag()]);
   } catch (e) {
     showLogin(); setMsg($('#loginMsg'), 'Chargement de vos outils impossible. Rechargez la page.'); return;
   }
-  if (!S.outils.length) {
+  if (!S.outils.length && !S.admin) {
     await sb.auth.signOut(); showLogin();
     setMsg($('#loginMsg'), "Ce compte n'a encore accès à aucun outil Hympyr. Contactez l'administrateur."); return;
   }
@@ -338,9 +539,17 @@ async function enterApp(session, { fresh = false } = {}) {
   const today = new Date().toISOString().slice(0, 10), k = 'hy-portail-cx-' + S.user.id;
   if (fresh || store.get(k, '') !== today) { store.set(k, today); journal('connexion'); }
 
+  // Retour vers l'outil qui a renvoyé ici (?retour=…), seulement s'il fait partie des outils autorisés
+  const cible = outilDeRetour();
+  if (cible) {
+    if (cible.outil) { await journal('ouverture_outil', cible.outil.slug); location.replace(cible.url); return; }
+    toast("Vous n'avez pas accès à cet outil. Demandez un accès avec le bouton ticket.", 'x');
+  }
+  history.replaceState(null, '', location.pathname + location.hash);
+
   const l = $('#login');
   if (!l.hidden) { await $('#loginCard').animate([{ opacity: 1 }, { opacity: 0, transform: 'translateY(-10px) scale(.98)' }], { duration: 240, fill: 'forwards' }).done; l.hidden = true; $('#loginCard').getAnimations().forEach(a => a.cancel()); }
-  const start = location.hash === '#compte' ? 'compte' : 'outils';
+  const start = location.hash === '#compte' ? 'compte' : (location.hash === '#admin' && S.admin) ? 'admin' : 'outils';
   S.view = start; $$('.view').forEach(v => { v.hidden = v.dataset.view !== start; });
   $$('.scene').forEach(s => s.classList.toggle('on', s.dataset.scene === start));
   $('#app').hidden = false;
@@ -348,6 +557,7 @@ async function enterApp(session, { fresh = false } = {}) {
   $('.topbar').animate([{ opacity: 0, transform: 'translate(-50%,-14px)' }, { opacity: 1, transform: 'translate(-50%,0)' }], { duration: 620, easing: EASE });
   $('#ticketBtn').animate([{ opacity: 0, transform: 'translateY(12px)' }, { opacity: 1, transform: 'none' }], { duration: 560, delay: 300, easing: EASE, fill: 'backwards' });
   stagger($(`#v-${start}`));
+  if (start === 'admin') openAdmin();
 }
 
 $('#loginForm').addEventListener('submit', async e => {

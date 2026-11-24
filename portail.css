@@ -123,3 +123,8 @@ html.vt-fade::view-transition-old(root),html.vt-fade::view-transition-new(root){
   .adm-danger .btn{justify-self:start}
   .adm-cred{grid-template-columns:1fr}
 }
+
+/* mot de passe défini par l'administrateur */
+.adm-pwd-block{display:flex;flex-direction:column;gap:6px;min-width:0}
+.adm-pwd-block .adm-pwd{margin-top:4px;max-width:360px}
+.adm-hint{font-size:12px!important}

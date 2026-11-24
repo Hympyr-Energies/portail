@@ -42,7 +42,9 @@ Authentication > URL Configuration : ajouter l'adresse du portail aux « Redirec
 Onglet « Administration », visible seulement si `portail_est_admin()` est vrai (la base refuse le reste via RLS).
 - Collaborateurs : outils et rôle par outil, date de fin d'accès facultative, pôle, compte actif, administrateur du portail.
   Chaque changement est recopié par trigger dans la table de membres de l'outil concerné.
-- Nouveaux comptes : inviter la personne depuis Supabase (Authentication > Users > Invite user), puis « Ajouter » ici.
+- Comptes : création (mot de passe temporaire à changer à la 1re connexion), mot de passe temporaire, suppression,
+  via la fonction Edge `portail-admin` (`supabase/functions/portail-admin`, clé serveur côté Supabase uniquement,
+  appelant vérifié administrateur actif à chaque appel, actions tracées dans `portail_admin_journal`).
 - Tickets : changement de statut (ouvert, en cours, résolu).
 - Garde-fous : on désactive, on ne supprime pas ; il reste toujours au moins un administrateur actif.
-Prérequis SQL : `supabase/migrations/20261124_portail_admin.sql`.
+Prérequis SQL : `supabase/migrations/20261124_portail_admin.sql` puis `20261124_portail_admin_comptes.sql`.

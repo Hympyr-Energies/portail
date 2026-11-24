@@ -46,6 +46,11 @@ const I = {
   check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
   x: '<path d="M6 6l12 12M18 6 6 18"/>',
   send: '<path d="M21 3 10 14M21 3l-7 18-4-7-7-4z"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  refresh: '<path d="M20 11a8 8 0 0 0-14.6-4.5L4 8"/><path d="M4 4v4h4"/><path d="M4 13a8 8 0 0 0 14.6 4.5L20 16"/><path d="M20 20v-4h-4"/>',
+  key: '<circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M17 6l3 3M14 9l2 2"/>',
+  trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
+  copy: '<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>',
   shield: '<path d="M12 3 4 6v6c0 4.5 3.4 8.2 8 9 4.6-.8 8-4.5 8-9V6z"/><path d="m9 12 2 2 4-4"/>'
 };
 const ic = (n, cls = 'i') => `<svg class="${cls}" viewBox="0 0 24 24" aria-hidden="true">${I[n] || I.tool}</svg>`;
@@ -123,16 +128,18 @@ function setMsg(el, txt, kind = 'err') {
   if (txt) el.animate([{ opacity: 0, transform: 'translateY(-4px)' }, { opacity: 1, transform: 'none' }], { duration: 320, easing: EASE });
 }
 
-/* ---------- thème (vague circulaire depuis le coin, comme la charte) ---------- */
+/* ---------- thème : fondu enchaîné court de toute la page ----------
+   Les transitions CSS sont coupées pendant la bascule : sans ça, les couleurs glissaient une à une
+   après le fondu, d'où l'effet « en deux temps » relevé le 24/11. */
 function syncTheme() { $('#themeBtn').setAttribute('aria-label', root.dataset.theme === 'dark' ? 'Passer en mode clair' : 'Passer en mode sombre'); }
 function setTheme(next) {
   const apply = () => { root.dataset.theme = next; store.set('hy-theme', next); syncTheme(); renderLogos(); };
-  if (!document.startViewTransition || RM) { apply(); return; }
+  root.classList.add('theme-switch');
+  const fin = () => requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove('theme-switch')));
+  if (!document.startViewTransition || RM) { apply(); fin(); return; }
+  root.classList.add('vt-fade');
   const vt = document.startViewTransition(apply);
-  vt.ready.then(() => {
-    const r = Math.hypot(innerWidth, innerHeight);
-    root.animate({ clipPath: ['circle(0px at 100% 0%)', `circle(${r}px at 100% 0%)`] }, { duration: 950, easing: 'cubic-bezier(.65,0,.35,1)', pseudoElement: '::view-transition-new(root)' });
-  }).catch(() => {});
+  vt.finished.finally(() => { root.classList.remove('vt-fade'); fin(); });
 }
 $('#themeBtn').onclick = () => setTheme(root.dataset.theme === 'dark' ? 'light' : 'dark');
 
@@ -392,14 +399,15 @@ function accesAdminHTML() {
     : `<div class="adm-empty glass">Tous les comptes sont rattachés au portail.</div>`;
   return `<div class="adm-tools" data-st>
       <input class="input" id="admQ" type="search" placeholder="Rechercher un nom, une adresse, un pôle" aria-label="Rechercher un collaborateur">
-      <span class="muted" style="font-size:13px">${A.collab.filter(c => c.actif).length} collaborateurs actifs</span>
+      <div class="adm-tools-r"><span class="muted" style="font-size:13px">${A.collab.filter(c => c.actif).length} collaborateurs actifs</span>
+        <button class="btn sm mag" type="button" data-new>${ic('plus')}<span>Nouveau collaborateur</span></button></div>
     </div>
     <div class="adm-list" id="admList">${collabRowsHTML()}</div>
-    <div class="adm-sec">
-      <h3 data-st>Nouveaux comptes</h3>
-      <p data-st>Pour ajouter quelqu'un : Supabase, Authentication, Users, « Invite user » avec son adresse professionnelle. Son compte apparaît alors ici : cliquez sur « Ajouter » et choisissez ses outils.</p>
+    ${libres.length || !A.comptesOk ? `<div class="adm-sec">
+      <h3 data-st>Comptes sans fiche portail</h3>
+      <p data-st>Comptes de connexion existants qui n'apparaissent pas encore dans le portail. Cliquez sur « Ajouter » pour leur attribuer des outils.</p>
       ${libresHTML}
-    </div>`;
+    </div>` : ''}`;
 }
 function ticketsAdminHTML() {
   if (!A.tickets.length) return `<div class="adm-empty glass" data-st>Aucun ticket pour l'instant.</div>`;
@@ -423,18 +431,33 @@ function editHTML(c, isNew) {
       <select class="input" data-acl="${esc(o.slug)}" aria-label="Rôle pour ${esc(o.nom)}">${opts}</select>
       <input class="input" type="date" data-exp="${esc(o.slug)}" value="${a.expire_le ? a.expire_le.slice(0, 10) : ''}" aria-label="Fin d'accès à ${esc(o.nom)} (facultatif)"></div>`;
   }).join('');
-  const moi = c.user_id === S.user.id;
-  return `<div class="modal-head"><div><span class="label">${isNew ? 'Nouveau collaborateur' : 'Collaborateur'}</span>
-      <h2 id="ticketTitle" style="margin-top:6px">${esc(isNew ? c.email : nomCollab(c))}</h2><p>${esc(c.email)}</p></div>
+  const moi = c.user_id === S.user.id, creation = !!c.creation;
+  const titre = creation ? 'Nouveau collaborateur' : isNew ? c.email : nomCollab(c);
+  const compte = creation ? `<div class="adm-grid">
+        <label class="field"><span>Adresse e-mail professionnelle</span><input class="input" id="aEmail" type="email" autocomplete="off" placeholder="prenom.nom@hympyr.fr"></label>
+        <div class="field"><span>Mot de passe temporaire</span><div class="adm-pwd"><input class="input" id="aPwd" autocomplete="off" spellcheck="false" value="${esc(genMdp())}">
+          <button class="icon-btn" type="button" data-regen aria-label="Générer un autre mot de passe" title="Générer un autre mot de passe">${ic('refresh')}</button></div></div>
+      </div>
+      <p class="muted" style="font-size:13px;margin-top:-6px">La personne devra choisir son propre mot de passe à sa première connexion.</p>` : '';
+  const actions = creation || isNew ? '' : `<div class="adm-danger">
+      <div><b>Mot de passe</b><span>Génère un mot de passe temporaire à transmettre. Il devra être changé à la connexion.</span></div>
+      <button class="btn ghost sm mag" type="button" data-pwd-reset>${ic('key')}<span>Mot de passe temporaire</span></button>
+      ${moi ? '' : `<div><b>Supprimer le compte</b><span>Retire tous ses accès dans les outils puis supprime son compte de connexion. Définitif.</span></div>
+      <button class="btn ghost sm mag danger" type="button" data-delete>${ic('trash')}<span>Supprimer</span></button>`}
+      <p class="msg" id="aActMsg" role="status" aria-live="polite"></p>
+    </div>`;
+  return `<div class="modal-head"><div><span class="label">${creation ? 'Administration' : isNew ? 'Nouveau collaborateur' : 'Collaborateur'}</span>
+      <h2 id="ticketTitle" style="margin-top:6px">${esc(titre)}</h2>${creation ? '' : `<p>${esc(c.email)}</p>`}</div>
       <button class="icon-btn" data-close aria-label="Fermer">${ic('x')}</button></div>
     <form class="form" id="admForm" novalidate>
+      ${compte}
       <div class="adm-grid">
         <label class="field"><span>Prénom</span><input class="input" id="aPrenom" maxlength="60" value="${esc(c.prenom || '')}"></label>
         <label class="field"><span>Nom</span><input class="input" id="aNom" maxlength="60" value="${esc(c.nom || '')}"></label>
         <label class="field"><span>Pôle</span><select class="input" id="aPole"><option value="">Non renseigné</option>${poles}</select></label>
       </div>
       <div class="adm-checks">
-        <label><input type="checkbox" id="aActif" ${c.actif !== false ? 'checked' : ''} ${moi ? 'disabled' : ''}> Compte actif</label>
+        <label ${creation ? 'hidden' : ''}><input type="checkbox" id="aActif" ${c.actif !== false ? 'checked' : ''} ${moi ? 'disabled' : ''}> Compte actif</label>
         <label><input type="checkbox" id="aAdmin" ${c.admin_portail ? 'checked' : ''} ${moi ? 'disabled' : ''}> Administrateur du portail</label>
       </div>
       ${moi ? '<p class="muted" style="font-size:13px">Vous ne pouvez pas retirer vos propres droits d\'administrateur.</p>' : ''}
@@ -442,15 +465,87 @@ function editHTML(c, isNew) {
         <div class="adm-acl-head"><span>Outil</span><span>Rôle</span><span>Fin d'accès (facultatif)</span></div>
         <div class="adm-acl">${lignes}</div></div>
       <p class="msg" id="aErr" role="alert"></p>
-      <button class="btn block mag" type="submit" id="aSave">${ic('check')}<span>Enregistrer</span></button>
-    </form>`;
+      <button class="btn block mag" type="submit" id="aSave">${ic('check')}<span>${creation ? 'Créer le compte' : 'Enregistrer'}</span></button>
+    </form>
+    ${actions}`;
 }
 function openEdit(c, isNew) {
   const ov = $('#ticketOverlay'), m = $('#ticketModal');
   m.classList.add('wide'); m.innerHTML = editHTML(c, isNew); ov.hidden = false;
   ov.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 320, easing: EASE });
   m.animate([{ opacity: 0, transform: 'translateY(18px) scale(.97)' }, { opacity: 1, transform: 'none' }], { duration: 480, easing: EASE });
-  $('#admForm').onsubmit = e => { e.preventDefault(); saveEdit(c, isNew); };
+  $('#admForm').onsubmit = e => { e.preventDefault(); c.creation ? createUser() : saveEdit(c, isNew); };
+  const rg = $('[data-regen]'); if (rg) rg.onclick = () => { $('#aPwd').value = genMdp(); };
+  const pr = $('[data-pwd-reset]'); if (pr) pr.onclick = () => resetPwd(c, pr);
+  const dl = $('[data-delete]'); if (dl) dl.onclick = () => deleteUser(c, dl);
+  setTimeout(() => ($('#aEmail') || $('#aPrenom')).focus({ preventScroll: true }), 200);
+}
+
+/* --- actions sur les comptes de connexion : fonction serveur « portail-admin » (clé serveur côté Supabase uniquement) --- */
+function genMdp(n = 14) {
+  const abc = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';   // sans 0/O, 1/l/I : dictable sans erreur
+  const v = crypto.getRandomValues(new Uint32Array(n));
+  let m = Array.from(v, x => abc[x % abc.length]).join('');
+  if (!/\d/.test(m)) m = m.slice(0, -1) + '7';
+  return m;
+}
+async function adminCall(action, corps) {
+  const { data, error } = await sb.functions.invoke('portail-admin', { body: { action, ...corps } });
+  if (!error) return data;
+  let msg = 'Action impossible pour le moment. Réessayez.';
+  try { const j = await error.context.json(); if (j && j.message) msg = j.message; } catch (e) {}
+  if (/Failed to send|fetch/i.test(error.message || '') && msg.startsWith('Action')) msg = 'Service d\'administration injoignable. Vérifiez votre connexion.';
+  throw new Error(msg);
+}
+const aclChoisis = () => A.outils.map(o => {
+  const role = $(`[data-acl="${o.slug}"]`).value, d = $(`[data-exp="${o.slug}"]`).value;
+  return role ? { outil_slug: o.slug, role, expire_le: d ? new Date(d + 'T23:59:59').toISOString() : null } : null;
+}).filter(Boolean);
+function mdpHTML(titre, email, mdp, note) {
+  return `<div class="sent"><span class="ok-c"><svg class="i" viewBox="0 0 24 24">${I.check}</svg></span><h2>${esc(titre)}</h2>
+    <p class="muted">${esc(note)}</p>
+    <div class="adm-cred"><span>Identifiant</span><b>${esc(email)}</b><span>Mot de passe temporaire</span><b class="mono">${esc(mdp)}</b></div>
+    <div class="btn-row" style="justify-content:center"><button class="btn ghost mag" type="button" data-copy>${ic('copy')}<span>Copier</span></button>
+    <button class="btn mag" data-close>Fermer</button></div>
+    <p class="muted" style="font-size:12.5px">Ce mot de passe ne sera plus affiché. Transmettez-le de vive voix ou par un canal séparé de l'adresse e-mail.</p></div>`;
+}
+function bindCopy(email, mdp) {
+  const b = $('[data-copy]'); if (!b) return;
+  b.onclick = async () => {
+    try { await navigator.clipboard.writeText(`Portail Hympyr : ${location.origin}${location.pathname}\nIdentifiant : ${email}\nMot de passe temporaire : ${mdp}`); b.lastChild.textContent = 'Copié'; }
+    catch (e) { b.lastChild.textContent = 'Copie impossible'; }
+  };
+}
+async function createUser() {
+  const err = $('#aErr'), btn = $('#aSave'), email = $('#aEmail').value.trim().toLowerCase(), mdp = $('#aPwd').value.trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setMsg(err, 'Saisissez une adresse e-mail valide.'); $('#aEmail').focus(); return; }
+  if (A.collab.some(c => c.email === email)) { setMsg(err, 'Cette adresse a déjà une fiche dans le portail.'); return; }
+  if (mdp.length < 10) { setMsg(err, 'Le mot de passe temporaire doit contenir 10 caractères minimum.'); return; }
+  const acces = aclChoisis();
+  if (!acces.length) { setMsg(err, 'Attribuez au moins un outil.'); return; }
+  btn.disabled = true; btn.lastChild.textContent = 'Création en cours';
+  try {
+    await adminCall('creer', { email, password: mdp, prenom: $('#aPrenom').value.trim(), nom: $('#aNom').value.trim(),
+      pole: $('#aPole').value, admin_portail: $('#aAdmin').checked, acces });
+  } catch (e) { btn.disabled = false; btn.lastChild.textContent = 'Créer le compte'; setMsg(err, e.message); return; }
+  $('#ticketModal').innerHTML = mdpHTML('Compte créé', email, mdp, 'Le compte est actif et ses outils sont ouverts.');
+  bindCopy(email, mdp); A.loaded = false; openAdmin();
+}
+async function resetPwd(c, btn) {
+  if (btn.dataset.armed !== '1') { btn.dataset.armed = '1'; btn.lastChild.textContent = 'Confirmer'; setMsg($('#aActMsg'), 'Son mot de passe actuel cessera de fonctionner. Cliquez sur « Confirmer ».', 'ok'); return; }
+  const mdp = genMdp(); btn.disabled = true;
+  try { await adminCall('mot_de_passe', { user_id: c.user_id, password: mdp }); }
+  catch (e) { btn.disabled = false; setMsg($('#aActMsg'), e.message); return; }
+  $('#ticketModal').innerHTML = mdpHTML('Mot de passe réinitialisé', c.email, mdp, `${nomCollab(c)} devra choisir son propre mot de passe à la prochaine connexion.`);
+  bindCopy(c.email, mdp);
+}
+async function deleteUser(c, btn) {
+  if (btn.dataset.armed !== '1') { btn.dataset.armed = '1'; btn.lastChild.textContent = 'Confirmer la suppression'; setMsg($('#aActMsg'), `Supprimer définitivement le compte de ${nomCollab(c)} ? Cliquez de nouveau pour confirmer.`); return; }
+  btn.disabled = true;
+  try { await adminCall('supprimer', { user_id: c.user_id }); }
+  catch (e) { btn.disabled = false; setMsg($('#aActMsg'), e.message); return; }
+  await closeTicket(); $('#ticketModal').classList.remove('wide');
+  toast(`Compte de ${nomCollab(c)} supprimé`); openAdmin();
 }
 async function saveEdit(c, isNew) {
   const err = $('#aErr'), btn = $('#aSave');
@@ -486,6 +581,7 @@ async function saveEdit(c, isNew) {
 document.addEventListener('click', e => {
   const ed = e.target.closest('[data-edit]');
   if (ed) { const c = A.collab.find(x => x.user_id === ed.dataset.edit); if (c) openEdit(c, false); return; }
+  if (e.target.closest('[data-new]')) { openEdit({ user_id: null, email: '', actif: true, creation: true }, true); return; }
   const ad = e.target.closest('[data-add]');
   if (ad) { const c = A.comptes.find(x => x.user_id === ad.dataset.add); if (c) openEdit({ user_id: c.user_id, email: c.email, actif: true }, true); return; }
   const tg = e.target.closest('[data-tab-go]'); if (tg) go(tg.dataset.tabGo);
@@ -524,6 +620,13 @@ function showLogin() {
   $('#app').hidden = true; $('#login').hidden = false;
   $('#loginCard').animate([{ opacity: 0, transform: 'translateY(16px) scale(.98)' }, { opacity: 1, transform: 'none' }], { duration: 620, easing: EASE });
 }
+function showForcePwd() {
+  showLogin();
+  $('#loginForm').hidden = true; $('#resetForm').hidden = false; $('#forgotBtn').parentElement.hidden = true;
+  $('#loginTitle').textContent = 'Choisissez votre mot de passe';
+  $('#loginLead').textContent = "Vous vous êtes connecté avec un mot de passe temporaire. Choisissez le vôtre : il vaudra pour tous les outils Hympyr.";
+  setTimeout(() => $('#newPassword').focus({ preventScroll: true }), 300);
+}
 async function enterApp(session, { fresh = false } = {}) {
   S.user = session.user;
   try {
@@ -531,6 +634,9 @@ async function enterApp(session, { fresh = false } = {}) {
   } catch (e) {
     showLogin(); setMsg($('#loginMsg'), 'Chargement de vos outils impossible. Rechargez la page.'); return;
   }
+  // Mot de passe temporaire donné par un administrateur : on impose le choix d'un mot de passe personnel
+  const { data: aChanger } = await sb.rpc('portail_mdp_a_changer');
+  if (aChanger === true) { S.forceMdp = true; showForcePwd(); return; }
   if (!S.outils.length && !S.admin) {
     await sb.auth.signOut(); showLogin();
     setMsg($('#loginMsg'), "Ce compte n'a encore accès à aucun outil Hympyr. Contactez l'administrateur."); return;
@@ -584,7 +690,10 @@ $('#resetForm').addEventListener('submit', async e => {
   e.preventDefault(); const p = $('#newPassword'), msg = $('#resetMsg');
   if (p.value.length < 10) { setMsg(msg, 'Choisissez un mot de passe de 10 caractères minimum.'); return; }
   const { error } = await sb.auth.updateUser({ password: p.value });
-  if (error) { setMsg(msg, 'Mise à jour impossible. Demandez un nouveau lien de réinitialisation.'); return; }
+  if (error) { setMsg(msg, /different|same/i.test(error.message) ? 'Choisissez un mot de passe différent du mot de passe temporaire.'
+    : /weak|pwned|leaked/i.test(error.message) ? 'Ce mot de passe est trop faible. Choisissez-en un autre.'
+    : S.forceMdp ? 'Mise à jour impossible pour le moment. Réessayez.' : 'Mise à jour impossible. Demandez un nouveau lien de réinitialisation.'); return; }
+  if (S.forceMdp) { await sb.rpc('portail_mdp_change'); S.forceMdp = false; $('#loginTitle').textContent = 'Portail Hympyr'; }
   p.value = ''; $('#resetForm').hidden = true; $('#loginForm').hidden = false; $('#forgotBtn').parentElement.hidden = false;
   const { data } = await sb.auth.getSession(); if (data.session) enterApp(data.session, { fresh: true });
 });
@@ -595,6 +704,7 @@ $('#pwdForm').addEventListener('submit', async e => {
   const { error } = await sb.auth.updateUser({ password: p.value });
   $('#pwdBtn').disabled = false;
   if (error) { setMsg(msg, /weak|pwned|leaked/i.test(error.message) ? 'Ce mot de passe est trop faible ou figure dans une fuite connue. Choisissez-en un autre.' : 'Mise à jour impossible pour le moment.'); return; }
+  sb.rpc('portail_mdp_change').then(() => {}, () => {});
   p.value = ''; setMsg(msg, 'Mot de passe enregistré pour tous vos outils.', 'ok');
 });
 async function logout() {

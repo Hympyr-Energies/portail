@@ -670,9 +670,22 @@ function outilDeRetour() {
 function nomOutilDeRetour() {
   const q = new URLSearchParams(location.search);
   const brut = q.get('retour') || q.get('refus'); if (!brut) return '';
+  if (NOM_OUTIL_BASE) return `« ${NOM_OUTIL_BASE} »`;
   const slug = new URLSearchParams(location.search).get('outil') || '';
   return { cockpit_appels: 'le cockpit appels', cockpit_granules: 'le cockpit granulés', renommage_tournees: 'le renommage des tournées', pilotage_communication: 'le pilotage communication', charte: 'la charte graphique' }[slug] || 'votre outil';
 }
+/* Nom choisi dans Administration > Outils (fonction publique portail_nom_outil, lisible avant connexion) */
+let NOM_OUTIL_BASE = null;
+(async () => {
+  const slug = new URLSearchParams(location.search).get('outil'); if (!slug) return;
+  try {
+    const { data } = await sb.rpc('portail_nom_outil', { p_slug: slug });
+    if (typeof data !== 'string' || !data.trim()) return;
+    NOM_OUTIL_BASE = data.trim();
+    const n = nomOutilDeRetour();
+    if (n && $('#loginLead').textContent.startsWith('Connectez-vous pour ouvrir')) $('#loginLead').textContent = `Connectez-vous pour ouvrir ${n}. Le même compte vaut pour tous les outils Hympyr.`;
+  } catch (e) { /* script SQL 10 pas encore exécuté : libellés par défaut */ }
+})();
 function showLogin() {
   const n = nomOutilDeRetour();
   if (n) $('#loginLead').textContent = `Connectez-vous pour ouvrir ${n}. Le même compte vaut pour tous les outils Hympyr.`;

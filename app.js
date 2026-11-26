@@ -341,18 +341,29 @@ const A = { tab: 'acces', q: '', collab: [], acces: [], outils: [], comptes: [],
 const dCourt = v => v ? new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(v)) : '';
 const nomCollab = c => [c.prenom, c.nom].filter(Boolean).join(' ') || c.email.split('@')[0];
 
+/* Tickets : chaque outil garde sa table (portail, fichier client, charte, pilotage communication).
+   La fonction portail_tickets_admin() (sql/11) les réunit pour l'administrateur.
+   Tant que ce script n'est pas exécuté, on se rabat sur les seuls tickets du portail. */
+async function chargerTickets() {
+  const r = await sb.rpc('portail_tickets_admin');
+  if (!r.error) return { data: r.data || [] };
+  const v = await sb.from('portail_tickets').select('*').order('cree_le', { ascending: false }).limit(200);
+  return { data: (v.data || []).map(t => ({ ...t, source: 'portail', ticket_id: String(t.id) })), ancien: true };
+}
+const cleTicket = t => t.source + ':' + t.ticket_id;
+
 async function loadAdmin() {
   const [co, ac, ou, cp, tk] = await Promise.all([
     sb.from('portail_collaborateurs').select('*'),
     sb.from('portail_acces').select('*'),
     sb.from('portail_outils').select('slug,nom,description,roles_possibles,ordre,statut').order('ordre'),
     sb.rpc('portail_admin_comptes'),
-    sb.from('portail_tickets').select('*').order('cree_le', { ascending: false }).limit(200)
+    chargerTickets()
   ]);
   if (co.error || ac.error || ou.error) throw (co.error || ac.error || ou.error);
   A.collab = co.data; A.acces = ac.data; A.outils = ou.data.filter(o => o.statut !== 'archive');
   A.comptesOk = !cp.error; A.comptes = cp.data || [];
-  A.tickets = tk.data || []; A.loaded = true;
+  A.tickets = tk.data || []; A.ticketsAncien = !!tk.ancien; A.loaded = true;
 }
 async function openAdmin() {
   const body = $('#admBody');
@@ -451,9 +462,11 @@ function ticketsAdminHTML() {
   const nomOutil = s => (A.outils.find(o => o.slug === s) || {}).nom || 'Portail';
   return `<div class="adm-list">${A.tickets.map(t => `<div class="tk-row glass" data-st>
       <div><div class="tk-meta"><span class="pill ${t.type === 'erreur' ? 'warn' : ''}">${esc(TICKET_TYPE[t.type] || t.type)}</span>
-        <span>${esc(nomOutil(t.outil_slug))} · ${esc(t.auteur_email || '')} · ${esc(dCourt(t.cree_le))}</span></div>
-        <h4>${esc(t.sujet)}</h4><p>${esc(t.message)}</p></div>
-      <label class="field"><span>Statut</span><select class="input" data-ticket-statut="${t.id}">
+        <span class="pill">${esc(nomOutil(t.outil_slug))}</span>
+        <span>${esc(t.auteur_nom || t.auteur_email || '')} · ${esc(dCourt(t.cree_le))}${t.page ? ' · ' + esc(t.page) : ''}</span></div>
+        <h4>${esc(t.sujet)}</h4><p>${esc(t.message)}</p>
+        ${t.reponse ? `<p class="tk-rep"><b>Réponse dans l'outil</b>${esc(t.reponse)}</p>` : ''}</div>
+      <label class="field"><span>Statut</span><select class="input" data-ticket-statut="${esc(cleTicket(t))}">
         ${TICKET_STATUT.map(([v, l]) => `<option value="${v}" ${v === t.statut ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
     </div>`).join('')}</div>`;
 }
@@ -646,9 +659,12 @@ document.addEventListener('click', e => {
 });
 document.addEventListener('change', async e => {
   const s = e.target.closest('[data-ticket-statut]'); if (!s) return;
-  const { error } = await sb.from('portail_tickets').update({ statut: s.value }).eq('id', +s.dataset.ticketStatut);
-  if (error) { toast('Statut non enregistré. Réessayez.', 'x'); return; }
-  const t = A.tickets.find(x => x.id === +s.dataset.ticketStatut); if (t) t.statut = s.value;
+  const t = A.tickets.find(x => cleTicket(x) === s.dataset.ticketStatut); if (!t) return;
+  const { error } = A.ticketsAncien
+    ? await sb.from('portail_tickets').update({ statut: s.value }).eq('id', +t.ticket_id)
+    : await sb.rpc('portail_ticket_statut', { p_source: t.source, p_id: t.ticket_id, p_statut: s.value });
+  if (error) { s.value = t.statut; toast('Statut non enregistré. Réessayez.', 'x'); return; }
+  t.statut = s.value;
   toast('Statut du ticket mis à jour');
 });
 

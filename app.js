@@ -332,7 +332,7 @@ addEventListener('keydown', e => { if (e.key === 'Escape') closeTicket(); });
 
 /* =========================================================
    ADMINISTRATION (administrateurs du portail)
-   La sécurité est en base : RLS sur portail_collaborateurs / portail_acces, fonction portail_admin_comptes().
+   La sécurité est en base : RLS sur portail_collaborateurs / portail_acces / portail_outils, fonction portail_admin_comptes().
    On désactive un collaborateur, on ne le supprime jamais (la suppression ne serait pas recopiée dans les outils).
    ========================================================= */
 const TICKET_TYPE = { question: 'Question', erreur: 'Erreur', suggestion: 'Suggestion', acces: 'Accès' };
@@ -345,7 +345,7 @@ async function loadAdmin() {
   const [co, ac, ou, cp, tk] = await Promise.all([
     sb.from('portail_collaborateurs').select('*'),
     sb.from('portail_acces').select('*'),
-    sb.from('portail_outils').select('slug,nom,roles_possibles,ordre,statut').order('ordre'),
+    sb.from('portail_outils').select('slug,nom,description,roles_possibles,ordre,statut').order('ordre'),
     sb.rpc('portail_admin_comptes'),
     sb.from('portail_tickets').select('*').order('cree_le', { ascending: false }).limit(200)
   ]);
@@ -359,12 +359,12 @@ async function openAdmin() {
   if (!A.loaded) body.innerHTML = `<div class="adm-empty glass">Chargement…</div>`;
   try { await loadAdmin(); } catch (e) { body.innerHTML = `<div class="adm-empty glass">Chargement impossible. Rechargez la page.</div>`; return; }
   const ouverts = A.tickets.filter(t => t.statut !== 'resolu').length;
-  seg($('#admSeg'), [['acces', 'Collaborateurs'], ['tickets', `Tickets${ouverts ? ' (' + ouverts + ')' : ''}`]], A.tab, v => { A.tab = v; renderAdmin(); });
+  seg($('#admSeg'), [['acces', 'Collaborateurs'], ['outils', 'Outils'], ['tickets', `Tickets${ouverts ? ' (' + ouverts + ')' : ''}`]], A.tab, v => { A.tab = v; renderAdmin(); });
   renderAdmin();
 }
 function renderAdmin() {
   const body = $('#admBody');
-  body.innerHTML = A.tab === 'tickets' ? ticketsAdminHTML() : accesAdminHTML();
+  body.innerHTML = A.tab === 'tickets' ? ticketsAdminHTML() : A.tab === 'outils' ? outilsAdminHTML() : accesAdminHTML();
   const q = $('#admQ'); if (q) { q.value = A.q; q.oninput = () => { A.q = q.value; $('#admList').innerHTML = collabRowsHTML(); }; }
   stagger(body);
 }
@@ -409,6 +409,43 @@ function accesAdminHTML() {
       ${libresHTML}
     </div>` : ''}`;
 }
+/* --- outils : nom et description affichés (l'identifiant et l'adresse ne changent pas, voir sql/9_renommer_outils.sql) --- */
+function outilsAdminHTML() {
+  return `<p class="muted adm-intro" data-st>Le nom et la description apparaissent sur les cartes « Mes outils », dans les fiches collaborateurs et les tickets.
+      L'adresse de l'outil et les droits ne changent pas.</p>
+    <div class="adm-list">${A.outils.map(o => `<form class="adm-row adm-outil glass" data-st data-outil-form="${esc(o.slug)}" novalidate>
+      <label class="field"><span>Nom affiché</span><input class="input" name="nom" required minlength="2" maxlength="40" value="${esc(o.nom)}"></label>
+      <label class="field"><span>Description</span><input class="input" name="description" maxlength="160" value="${esc(o.description || '')}"></label>
+      <button class="btn ghost sm mag" type="submit">${ic('check')}<span>Enregistrer</span></button>
+      <p class="msg" role="status" aria-live="polite"></p>
+    </form>`).join('')}</div>`;
+}
+async function saveOutil(f) {
+  const o = A.outils.find(x => x.slug === f.dataset.outilForm); if (!o) return;
+  const nom = f.nom.value.trim(), description = f.description.value.trim(), msg = $('.msg', f), btn = $('button', f);
+  if (nom.length < 2) { setMsg(msg, 'Le nom doit faire au moins 2 caractères.'); f.nom.focus(); return; }
+  if (nom === o.nom && description === (o.description || '')) { setMsg(msg, 'Aucune modification.', 'ok'); return; }
+  btn.disabled = true;
+  // .select() : sans droit d'écriture, la RLS ne renvoie aucune ligne au lieu d'une erreur
+  const { data, error } = await sb.from('portail_outils').update({ nom, description: description || null }).eq('slug', o.slug).select('slug,nom,description');
+  btn.disabled = false;
+  if (error || !data?.length) {
+    setMsg(msg, error?.code === '23514' ? 'Nom de 2 à 40 caractères, description de 160 caractères au plus.'
+      : !error || error.code === '42501' ? 'Modification refusée : exécutez le fichier SQL « 9_renommer_outils.sql » dans Supabase.'
+      : 'Enregistrement impossible. Réessayez.');
+    return;
+  }
+  Object.assign(o, data[0]);
+  // la vue « Mes outils » et « Mon compte » prennent le nouveau nom sans recharger la page
+  S.outils.forEach(x => { if (x.slug === o.slug) { x.nom = o.nom; x.description = o.description; } });
+  renderTools(); renderAccount();
+  setMsg(msg, '', 'ok'); toast(`Outil renommé : ${o.nom}`);
+}
+document.addEventListener('submit', e => {
+  const f = e.target.closest('[data-outil-form]'); if (!f) return;
+  e.preventDefault(); saveOutil(f);
+});
+
 function ticketsAdminHTML() {
   if (!A.tickets.length) return `<div class="adm-empty glass" data-st>Aucun ticket pour l'instant.</div>`;
   const nomOutil = s => (A.outils.find(o => o.slug === s) || {}).nom || 'Portail';

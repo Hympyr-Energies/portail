@@ -39,6 +39,7 @@ const I = {
   phone: '<path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/>',
   calc: '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15h.01M8 18h.01M12 18h.01M16 18h.01"/>',
   file: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 14h6M9 17h4"/>',
+  tarif: '<path d="M3.5 12.6V5a1.5 1.5 0 0 1 1.5-1.5h7.6a1.5 1.5 0 0 1 1.06.44l7 7a1.5 1.5 0 0 1 0 2.12l-7.6 7.6a1.5 1.5 0 0 1-2.12 0l-7-7a1.5 1.5 0 0 1-.44-1.06z"/><circle cx="8" cy="8" r="1.5"/>',
   calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/>',
   palette: '<path d="M12 3a9 9 0 1 0 0 18c1.2 0 2-.8 2-1.8 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-1 .8-1.8 1.8-1.8H17a4 4 0 0 0 4-4c0-4.4-4-8-9-8z"/><circle cx="7.5" cy="11" r="1.1"/><circle cx="10.5" cy="7" r="1.1"/><circle cx="15" cy="7.5" r="1.1"/>',
   tool: '<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z"/>',
@@ -56,8 +57,8 @@ const I = {
 const ic = (n, cls = 'i') => `<svg class="${cls}" viewBox="0 0 24 24" aria-hidden="true">${I[n] || I.tool}</svg>`;
 // Icône par outil ; un outil ajouté au catalogue sans entrée ici prend l'icône générique
 // Libellé court pour la barre mobile (11 px, une ligne)
-const TOOL_SHORT = { cockpit_appels: 'Appels', cockpit_granules: 'Granulés', renommage_tournees: 'Tournées', pilotage_communication: 'Com', charte: 'Charte' };
-const TOOL_ICON = { cockpit_appels: 'phone', cockpit_granules: 'calc', renommage_tournees: 'file', pilotage_communication: 'calendar', charte: 'palette' };
+const TOOL_SHORT = { cockpit_appels: 'Appels', cockpit_granules: 'Granulés', renommage_tournees: 'Tournées', pilotage_communication: 'Com', charte: 'Charte', grille_tarifaire: 'Tarifs' };
+const TOOL_ICON = { cockpit_appels: 'phone', cockpit_granules: 'calc', renommage_tournees: 'file', pilotage_communication: 'calendar', charte: 'palette', grille_tarifaire: 'tarif' };
 const ROLE_LABEL = { admin: 'Administrateur', manager: 'Manager', commercial: 'Commercial', direction: 'Direction', responsable: 'Responsable', editeur: 'Éditeur', lecteur: 'Lecteur', membre: 'Membre' };
 const POLE_LABEL = { commercial: 'Commercial', logistique: 'Logistique', pilotage: 'Pilotage', communication: 'Communication', comptable: 'Comptabilité' };
 const POLE_FILTER_FROM = 9; // décision du 24/11 : filtre par pôle seulement au-delà de 8 outils
@@ -688,7 +689,7 @@ function nomOutilDeRetour() {
   const brut = q.get('retour') || q.get('refus'); if (!brut) return '';
   if (NOM_OUTIL_BASE) return `« ${NOM_OUTIL_BASE} »`;
   const slug = new URLSearchParams(location.search).get('outil') || '';
-  return { cockpit_appels: 'le cockpit appels', cockpit_granules: 'le cockpit granulés', renommage_tournees: 'le renommage des tournées', pilotage_communication: 'le pilotage communication', charte: 'la charte graphique' }[slug] || 'votre outil';
+  return { cockpit_appels: 'le cockpit appels', cockpit_granules: 'le cockpit granulés', renommage_tournees: 'le renommage des tournées', pilotage_communication: 'le pilotage communication', charte: 'la charte graphique', grille_tarifaire: 'la grille tarifaire' }[slug] || 'votre outil';
 }
 /* Nom choisi dans Administration > Outils (fonction publique portail_nom_outil, lisible avant connexion) */
 let NOM_OUTIL_BASE = null;

@@ -30,6 +30,7 @@ const H_ACTION = {
   acces_retire: 'Accès à un outil retiré',
   renommer_outil: 'Outil renommé',
   ticket_statut: 'Statut d\'un ticket modifié',
+  rappels_reprogrammes: 'Rappels d\'un autre compte reprogrammés',
   coffre_cree: 'Coffre des mots de passe créé',
   coffre_lecture: 'Coffre chiffré téléchargé',
   coffre_deverrouille: 'Coffre déverrouillé',
@@ -51,12 +52,12 @@ const H_CAT = [['tout', 'Tout'], ['mdp', 'Mots de passe'], ['droits', 'Droits et
 function hCat(a) {
   if (a === 'mot_de_passe' || a.startsWith('coffre_')) return 'mdp';
   if (a.startsWith('acces_') || a.startsWith('admin_')) return 'droits';
-  if (a === 'renommer_outil' || a === 'ticket_statut') return 'outils';
+  if (a === 'renommer_outil' || a === 'ticket_statut' || a === 'rappels_reprogrammes') return 'outils';
   return 'comptes';
 }
 const H_ORIGINE = { outil: 'depuis l\'écran d\'un outil', serveur: 'via la gestion des comptes', sql: 'automatique ou SQL' };
 const H_CHAMP = { prenom: 'Prénom', nom: 'Nom', pole: 'Pôle', email: 'E-mail', role: 'Rôle', expire_le: 'Fin d\'accès', description: 'Description',
-  actif: 'Compte actif', admin_portail: 'Administrateur', version: 'Version de la clé' };
+  actif: 'Compte actif', admin_portail: 'Administrateur', version: 'Version de la clé', rappel_date: 'Date de rappel' };
 const H_COFFRE_CHAMP = { entite: 'entité', usage: 'usage', identifiant: 'identifiant', mot_de_passe: 'mot de passe', url: 'URL' };
 
 const hDate = v => new Intl.DateTimeFormat('fr-FR', { timeZone: 'Europe/Paris', day: 'numeric', month: 'short', year: 'numeric',
@@ -106,6 +107,7 @@ function hDetails(l) {
   if (Array.isArray(d.champs) && d.champs.length) out.push('Champs modifiés : ' + d.champs.map(c => H_COFFRE_CHAMP[c] || c).join(', '));
   if (d.entrees_rechiffrees !== undefined) out.push(`${d.entrees_rechiffrees} ligne${d.entrees_rechiffrees > 1 ? 's' : ''} rechiffrée${d.entrees_rechiffrees > 1 ? 's' : ''}`);
   if (l.action === 'coffre_lecture' && d.entrees !== undefined) out.push(`${d.entrees} ligne${d.entrees > 1 ? 's' : ''} chiffrée${d.entrees > 1 ? 's' : ''}`);
+  if (l.action === 'rappels_reprogrammes' && d.nombre) out.push(`${d.nombre} rappel${d.nombre > 1 ? 's' : ''} déplacé${d.nombre > 1 ? 's' : ''}` + (!l.cible_email && d.compte ? ` (compte ${d.compte})` : ''));
   if (l.action === 'ticket_statut' && d.statut) out.push('Nouveau statut : ' + ((TICKET_STATUT.find(s => s[0] === d.statut) || [])[1] || d.statut));
   if (l.action === 'creer' && Array.isArray(d.acces) && d.acces.length) out.push('Outils : ' + d.acces.map(a => `${hOutil(a.outil_slug)} (${ROLE_LABEL[a.role] || a.role})`).join(', '));
   return out;

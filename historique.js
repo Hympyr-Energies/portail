@@ -57,7 +57,7 @@ function hCat(a) {
 const H_ORIGINE = { outil: 'depuis l\'écran d\'un outil', serveur: 'via la gestion des comptes', sql: 'automatique ou SQL' };
 const H_CHAMP = { prenom: 'Prénom', nom: 'Nom', pole: 'Pôle', email: 'E-mail', role: 'Rôle', expire_le: 'Fin d\'accès', description: 'Description',
   actif: 'Compte actif', admin_portail: 'Administrateur', version: 'Version de la clé' };
-const H_COFFRE_CHAMP = { identifiant: 'identifiant', mot_de_passe: 'mot de passe', url: 'URL' };
+const H_COFFRE_CHAMP = { entite: 'entité', usage: 'usage', identifiant: 'identifiant', mot_de_passe: 'mot de passe', url: 'URL' };
 
 const hDate = v => new Intl.DateTimeFormat('fr-FR', { timeZone: 'Europe/Paris', day: 'numeric', month: 'short', year: 'numeric',
   hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date(v));
@@ -82,7 +82,7 @@ function hCible(l) {
   if (d.entree) {
     // Coffre déverrouillé : on montre localement de quelle ligne il s'agit, rien n'est lu en base
     const x = typeof V !== 'undefined' && V.cle ? V.lignes.find(e => e.id === d.entree) : null;
-    return x ? (x.clair.u ? `${x.clair.i || 'sans identifiant'} · ${coffreHote(x.clair.u)}` : x.clair.i || 'ligne sans identifiant') : 'Ligne ' + String(d.entree).slice(0, 8);
+    return x ? coffreLibelle(x.clair) : 'Ligne ' + String(d.entree).slice(0, 8);
   }
   if (l.action === 'ticket_statut') return `Ticket ${hOutil(d.source) === 'portail' ? 'du portail' : hOutil(d.source)} n° ${d.id}`;
   return '';

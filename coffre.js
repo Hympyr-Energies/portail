@@ -31,7 +31,7 @@ const aadLigne = (id, v) => TXT.encode(`hympyr-coffre|ligne|${id}|${v}`);
 const aadVerif = v => TXT.encode(`hympyr-coffre|verif|${v}`);
 const VERIF = 'hympyr-coffre-v1';
 // Entité du Groupe : chiffrée avec le reste de la ligne (champ « e »), la base ne la voit pas
-const COFFRE_ENTITES = [['energies', 'Hympyr Energies'], ['granules', 'Granulés'], ['transport', 'Transport']];
+const COFFRE_ENTITES = [['groupe', 'Groupe'], ['energies', 'Hympyr Energies'], ['granules', 'Granulés'], ['transport', 'Transport']];
 const entiteNom = e => (COFFRE_ENTITES.find(x => x[0] === e) || [])[1] || 'Non classé';
 // Libellé d'une ligne pour l'historique (affiché seulement quand le coffre est ouvert, rien n'est écrit en base)
 const coffreLibelle = c => [c.n || c.i || 'Ligne sans nom', c.e ? entiteNom(c.e) : ''].filter(Boolean).join(' · ');
@@ -215,7 +215,7 @@ function coffreLigneHTML(l) {
       <button class="icon-btn sm" type="button" data-cf-modifier aria-label="Modifier cette ligne" title="Modifier">${ic('edit')}</button>
     </div>`;
 }
-/* Une section par entité (Hympyr Energies, Granulés, Transport, puis « Non classé » pour les lignes d'avant le classement) */
+/* Une section par entité (Groupe, Hympyr Energies, Granulés, Transport, puis « Non classé » pour les lignes d'avant le classement) */
 function coffreLignesHTML() {
   const q = V.q.trim().toLowerCase();
   const list = V.lignes.filter(l => (V.entite === 'tout' || (l.clair.e || '') === V.entite) &&
@@ -353,7 +353,7 @@ async function coffreEnregistrer(l) {
   let u = $('#cfU').value.trim();
   if (u && !/^[a-z][a-z0-9+.-]*:/i.test(u)) u = 'https://' + u;
   const n = { e: $('#cfE').value, n: $('#cfN').value.trim(), i: $('#cfI').value.trim(), p: $('#cfP').value, u };
-  if (!n.e) { setMsg(err, 'Choisissez l\'entité : Hympyr Energies, Granulés ou Transport.'); $('#cfE').focus(); return; }
+  if (!n.e) { setMsg(err, 'Choisissez l\'entité : Groupe, Hympyr Energies, Granulés ou Transport.'); $('#cfE').focus(); return; }
   if (!n.n) { setMsg(err, 'Indiquez l\'usage : à quoi sert cet identifiant ?'); $('#cfN').focus(); return; }
   if (!n.p) { setMsg(err, 'Le mot de passe est vide.'); return; }
   const champs = l ? [['e', 'entite'], ['n', 'usage'], ['i', 'identifiant'], ['p', 'mot_de_passe'], ['u', 'url']].filter(([k]) => (l.clair[k] || '') !== n[k]).map(x => x[1]) : [];

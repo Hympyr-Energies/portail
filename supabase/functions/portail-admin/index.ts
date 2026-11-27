@@ -31,10 +31,13 @@ function entetes(req: Request, extra: Record<string, string> = {}) {
     "Vary": "Origin", "Cache-Control": "no-store", ...extra,
   };
 }
-const serveur = (base: "auth/v1" | "rest/v1", chemin: string, init: RequestInit = {}) =>
+// acteur : administrateur vérifié à l'origine de l'appel, transmis dans l'en-tête x-hym-acteur.
+// La base le lit pour signer l'historique des actions (sql/15) et ne le croit que si la requête porte la clé serveur.
+const serveur = (base: "auth/v1" | "rest/v1", chemin: string, init: RequestInit = {}, acteur = "") =>
   fetch(`${ENV.url}/${base}${chemin}`, {
     ...init, redirect: "manual",
-    headers: { apikey: ENV.serveur, Authorization: "Bearer " + ENV.serveur, "Content-Type": "application/json", ...(init.headers ?? {}) },
+    headers: { apikey: ENV.serveur, Authorization: "Bearer " + ENV.serveur, "Content-Type": "application/json",
+      ...(acteur ? { "x-hym-acteur": acteur } : {}), ...(init.headers ?? {}) },
   });
 
 class Refus extends Error { constructor(public statut: number, public code: string, message: string) { super(message); } }
@@ -56,7 +59,7 @@ async function tracer(par: { id: string; email: string }, action: string, cible_
   await serveur("rest/v1", "/portail_admin_journal", {
     method: "POST", headers: { Prefer: "return=minimal" },
     body: JSON.stringify({ par: par.id, par_email: par.email, action, cible_email, detail }),
-  }).catch(() => {});
+  }, par.id).catch(() => {});
 }
 async function emailDe(user_id: string): Promise<string> {
   const r = await serveur("auth/v1", `/admin/users/${user_id}`);
@@ -92,14 +95,14 @@ async function creer(par: { id: string; email: string }, c: any) {
     method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
     body: JSON.stringify({ user_id, email, prenom: c.prenom || null, nom: c.nom || null, pole: c.pole || null,
       admin_portail: !!c.admin_portail, actif: true, mdp_a_changer: true }),
-  });
+  }, par.id);
   if (!f.ok) { await serveur("auth/v1", `/admin/users/${user_id}`, { method: "DELETE" }); await erreurBase(f, "Fiche collaborateur non créée."); }
 
   if (acces.length) {
     const lignes = acces.map((a: any) => ({ user_id, outil_slug: String(a.outil_slug), role: String(a.role), expire_le: a.expire_le || null }));
     const p = await serveur("rest/v1", "/portail_acces?on_conflict=user_id,outil_slug", {
       method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify(lignes),
-    });
+    }, par.id);
     if (!p.ok) await erreurBase(p, "Compte créé, mais les accès n'ont pas été enregistrés.");
   }
   await tracer(par, "creer", email, { acces });
@@ -114,7 +117,7 @@ async function motDePasse(par: { id: string; email: string }, c: any) {
   if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Refus(422, "mdp", e?.msg ?? e?.message ?? "Mot de passe refusé par Supabase."); }
   // l'administrateur qui change son propre mot de passe n'a pas à le changer de nouveau
   if (c.user_id !== par.id) {
-    await serveur("rest/v1", `/portail_collaborateurs?user_id=eq.${c.user_id}`, { method: "PATCH", body: JSON.stringify({ mdp_a_changer: true }) });
+    await serveur("rest/v1", `/portail_collaborateurs?user_id=eq.${c.user_id}`, { method: "PATCH", body: JSON.stringify({ mdp_a_changer: true }) }, par.id);
   }
   await tracer(par, "mot_de_passe", email);
   return { ok: true };
@@ -126,10 +129,10 @@ async function supprimer(par: { id: string; email: string }, c: any) {
   const email = await emailDe(c.user_id);
   // 1. retirer les accès un par un : les triggers désactivent la personne dans chaque outil
   //    (une suppression en cascade ne serait pas recopiée dans les tables des outils)
-  const a = await serveur("rest/v1", `/portail_acces?user_id=eq.${c.user_id}`, { method: "DELETE" });
+  const a = await serveur("rest/v1", `/portail_acces?user_id=eq.${c.user_id}`, { method: "DELETE" }, par.id);
   if (!a.ok) await erreurBase(a, "Retrait des accès impossible.");
   // 2. supprimer la fiche (le garde-fou refuse s'il s'agit du dernier administrateur actif)
-  const f = await serveur("rest/v1", `/portail_collaborateurs?user_id=eq.${c.user_id}`, { method: "DELETE" });
+  const f = await serveur("rest/v1", `/portail_collaborateurs?user_id=eq.${c.user_id}`, { method: "DELETE" }, par.id);
   if (!f.ok) await erreurBase(f, "Suppression de la fiche impossible.");
   // 3. supprimer le compte de connexion
   const r = await serveur("auth/v1", `/admin/users/${c.user_id}`, { method: "DELETE" });

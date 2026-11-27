@@ -73,5 +73,6 @@ Prérequis : `supabase/migrations/20261127_coffre_mots_de_passe.sql` (fichier 16
 - Chiffrement de bout en bout dans le navigateur (WebCrypto) : clé AES-GCM 256 bits dérivée de la phrase secrète par PBKDF2-SHA256, 600 000 itérations, sel aléatoire. La phrase n'est ni envoyée ni stockée ; la base ne reçoit que du chiffré.
 - Tables sans aucun droit direct ; tout passe par les fonctions `portail_coffre_*`, réservées aux administrateurs actifs, qui tracent chaque lecture, ajout, modification, suppression et changement de phrase. Affichage et copie d'un mot de passe tracés aussi (affichage refusé si la trace échoue).
 - Verrouillage : 5 min sans activité, 1 min onglet en arrière-plan, sortie de l'administration, déconnexion. Presse-papiers vidé 30 s après une copie.
+- Colonnes : Usage, Identifiant, Mot de passe, URL de connexion, classées par entité (Hympyr Energies, Granulés, Transport). Usage et entité sont chiffrés avec la ligne (champs `n` et `e`) ; une ligne sans entité apparaît dans « Non classé ». Pour tracer leur modification : fichier 17 (`20261127_coffre_usage_entite.sql`).
 - Changer la phrase secrète : nouveau sel, nouvelle clé, toutes les lignes rechiffrées en une seule transaction.
 - **Phrase perdue = coffre perdu.** Aucune récupération possible, par conception. La conserver hors ligne.

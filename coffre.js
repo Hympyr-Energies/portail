@@ -205,7 +205,7 @@ async function coffreOuvrir(f) {
 function coffreLigneHTML(l) {
   const lien = coffreLienSur(l.clair.u || ''), vu = V.vus.has(l.id);
   return `<div class="cf-row glass" data-ligne="${esc(l.id)}">
-      <div class="cf-cell cf-usage" data-lab="Usage"><span class="cf-val">${esc(l.clair.n || '')}</span></div>
+      <div class="cf-cell cf-usage" data-lab="Usage">${l.clair.n ? `<span class="cf-val">${esc(l.clair.n)}</span>` : '<span class="cf-val muted">À compléter</span>'}</div>
       <div class="cf-cell" data-lab="Identifiant"><span class="cf-val">${esc(l.clair.i || '')}</span>
         ${l.clair.i ? `<button class="icon-btn sm" type="button" data-cf-copier-id aria-label="Copier l'identifiant" title="Copier l'identifiant">${ic('copy')}</button>` : ''}</div>
       <div class="cf-cell" data-lab="Mot de passe"><span class="cf-val mono ${vu ? 'vu' : ''}">${vu ? esc(l.clair.p || '') : '••••••••••••'}</span>

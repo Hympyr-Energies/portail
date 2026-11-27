@@ -2,6 +2,12 @@
 <html lang="fr" data-theme="light" data-brand="groupe">
 <head>
 <meta charset="utf-8">
+<!-- Politique de sécurité du contenu : la page ne charge et n'exécute que ses propres fichiers (+ le petit script de thème
+     ci-dessous, autorisé par son empreinte) et ne parle qu'à Supabase. Indispensable depuis que la page manipule le coffre
+     des mots de passe : un script tiers injecté ne pourrait ni s'exécuter ni envoyer de données ailleurs.
+     Modifier le script de thème = recalculer son empreinte sha256 ci-dessous. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-H+aZkj5CiVCRZT0QTQ9rjxwD/japz4/Sbpf8RXGnSJw='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://cmvkijtlkzfwnzipgstc.supabase.co wss://cmvkijtlkzfwnzipgstc.supabase.co; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Portail Hympyr</title>
 <meta name="theme-color" content="#1D2226">
@@ -14,14 +20,15 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<!-- supabase-js 2.45.4 servi depuis le portail (copie exacte du paquet npm, licence MIT) : aucun script tiers dans la page du coffre -->
+<script src="vendor/supabase-js-2.45.4.js"></script>
 <script>
   /* Thème appliqué avant le premier rendu : même clé que la charte et les autres outils */
   (function(){try{var t=JSON.parse(localStorage.getItem('hy-theme'));if(t!=='light'&&t!=='dark'){t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'}document.documentElement.dataset.theme=t}catch(e){}})();
 </script>
 <!-- ?v= : à changer à chaque mise à jour, sinon le navigateur peut garder l'ancienne version en cache. styles.css = feuille de style de la charte graphique (référence), portail.css = ajouts propres au portail -->
-<link rel="stylesheet" href="styles.css?v=20261126b">
-<link rel="stylesheet" href="portail.css?v=20261126b">
+<link rel="stylesheet" href="styles.css?v=20261127a">
+<link rel="stylesheet" href="portail.css?v=20261127a">
 </head>
 <body>
 
@@ -132,9 +139,9 @@
     <!-- ADMINISTRATION (administrateurs du portail uniquement ; la base refuse tout le reste) -->
     <section class="view" id="v-admin" data-view="admin" hidden>
       <div class="page-head glass" data-st>
-        <div class="txt"><span class="label">Administration</span><h1 style="margin-top:8px">Accès aux outils</h1>
-          <p>Un collaborateur, des outils, un rôle par outil. Chaque modification est recopiée dans l'outil concerné.</p></div>
-        <div class="seg glass glide" id="admSeg" role="tablist" aria-label="Rubrique d'administration"></div>
+        <div class="txt"><span class="label">Administration</span><h1 style="margin-top:8px" id="admTitre">Accès aux outils</h1>
+          <p id="admLead">Un collaborateur, des outils, un rôle par outil. Chaque modification est recopiée dans l'outil concerné.</p></div>
+        <div class="seg glass glide scroll" id="admSeg" role="tablist" aria-label="Rubrique d'administration"></div>
       </div>
       <div id="admBody" aria-live="polite"></div>
     </section>
@@ -154,6 +161,8 @@
 </div>
 
 <script src="config.js"></script>
-<script src="app.js?v=20261126b"></script>
+<script src="app.js?v=20261127a"></script>
+<script src="historique.js?v=20261127a"></script>
+<script src="coffre.js?v=20261127a"></script>
 </body>
 </html>

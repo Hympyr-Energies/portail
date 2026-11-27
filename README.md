@@ -9,11 +9,14 @@ Page d'accueil unique des outils internes Hympyr : une connexion, la liste des o
 | `index.html` | Écrans : connexion, Mes outils, Mon compte, ticket |
 | `styles.css` | Feuille de style de la charte graphique, copiée telle quelle depuis `hympyr_charte_graphique` |
 | `portail.css` | Ajouts propres au portail (tuiles, couleurs de marque) |
-| `app.js` | Logique : session Supabase, outils, journal, tickets |
+| `app.js` | Logique : session Supabase, outils, journal, tickets, administration |
+| `historique.js` | Administration > Historique des actions (lecture et export CSV du journal) |
+| `coffre.js` | Administration > Mots de passe du Groupe (coffre chiffré de bout en bout) |
+| `vendor/` | supabase-js 2.45.4 servi par le portail (copie exacte du paquet npm, licence MIT) |
 | `config.js` | URL du projet Supabase et clé publique (publishable). Jamais de clé secrète ici. |
 | `assets/` | Logos officiels Groupe, fond clair et fond sombre |
 
-Aucun build, aucune dépendance hors supabase-js 2.45.4 (même version que la charte et le pilotage).
+Aucun build, aucune dépendance hors supabase-js 2.45.4 (même version que la charte et le pilotage), servie depuis `vendor/` : aucun script tiers dans la page. Une politique de sécurité du contenu (CSP, `index.html`) n'autorise que les scripts du portail et les échanges avec Supabase ; modifier le petit script de thème dans `index.html` impose d'en recalculer l'empreinte sha256.
 
 ## Comment marchent les droits
 
@@ -54,3 +57,21 @@ Onglet « Administration », visible seulement si `portail_est_admin()` est vrai
 - Tickets : changement de statut (ouvert, en cours, résolu).
 - Garde-fous : on désactive, on ne supprime pas ; il reste toujours au moins un administrateur actif.
 Prérequis SQL : `supabase/migrations/20261124_portail_admin.sql` puis `20261124_portail_admin_comptes.sql`.
+
+## Historique des actions (Administration > Historique des actions)
+
+Prérequis : `supabase/migrations/20261127_historique_admin.sql` (fichier 15 du SQL Editor).
+- `portail_admin_journal` est en ajout seul : triggers qui refusent UPDATE, DELETE et TRUNCATE, droits retirés à tous les rôles, y compris la clé serveur.
+- Les traces sont écrites par la base (triggers sur `portail_collaborateurs`, `portail_acces`, `portail_outils`, fonctions du coffre et des tickets), jamais par le navigateur. Heure et auteur posés par le serveur.
+- Actions tracées : création, suppression et désactivation de compte, profil (nom, prénom, pôle), administration accordée ou retirée, accès à un outil ouvert, modifié ou retiré, renommage d'outil, statut de ticket, mot de passe de connexion redéfini, et toutes les actions du coffre. Valeurs avant et après, jamais de secret.
+- La fonction Edge `portail-admin` transmet l'administrateur vérifié dans l'en-tête `x-hym-acteur` pour signer ses traces (crue par la base seulement avec la clé serveur).
+- Limite : le propriétaire de la base (SQL Editor) peut toujours retirer un trigger. Témoin : l'export CSV régulier.
+
+## Mots de passe du Groupe (Administration > Mots de passe du Groupe)
+
+Prérequis : `supabase/migrations/20261127_coffre_mots_de_passe.sql` (fichier 16).
+- Chiffrement de bout en bout dans le navigateur (WebCrypto) : clé AES-GCM 256 bits dérivée de la phrase secrète par PBKDF2-SHA256, 600 000 itérations, sel aléatoire. La phrase n'est ni envoyée ni stockée ; la base ne reçoit que du chiffré.
+- Tables sans aucun droit direct ; tout passe par les fonctions `portail_coffre_*`, réservées aux administrateurs actifs, qui tracent chaque lecture, ajout, modification, suppression et changement de phrase. Affichage et copie d'un mot de passe tracés aussi (affichage refusé si la trace échoue).
+- Verrouillage : 5 min sans activité, 1 min onglet en arrière-plan, sortie de l'administration, déconnexion. Presse-papiers vidé 30 s après une copie.
+- Changer la phrase secrète : nouveau sel, nouvelle clé, toutes les lignes rechiffrées en une seule transaction.
+- **Phrase perdue = coffre perdu.** Aucune récupération possible, par conception. La conserver hors ligne.

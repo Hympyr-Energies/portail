@@ -265,6 +265,7 @@ async function go(view) {
   $$('.scene').forEach(s => s.classList.toggle('on', s.dataset.scene === view));
   await from.animate([{ opacity: 1 }, { opacity: 0, transform: `translateY(${RM ? 0 : -6}px)` }], { duration: 180, easing: 'cubic-bezier(.4,0,1,1)', fill: 'forwards' }).done;
   from.hidden = true; from.getAnimations().forEach(a => a.cancel());
+  if (from.id === 'v-admin') coffreVerrouiller(); // quitter l'administration referme le coffre
   to.hidden = false; scrollTo({ top: 0, behavior: 'instant' }); stagger(to);
   if (view === 'admin') openAdmin();
 }
@@ -371,11 +372,23 @@ async function openAdmin() {
   if (!A.loaded) body.innerHTML = `<div class="adm-empty glass">Chargement…</div>`;
   try { await loadAdmin(); } catch (e) { body.innerHTML = `<div class="adm-empty glass">Chargement impossible. Rechargez la page.</div>`; return; }
   const ouverts = A.tickets.filter(t => t.statut !== 'resolu').length;
-  seg($('#admSeg'), [['acces', 'Collaborateurs'], ['outils', 'Outils'], ['tickets', `Tickets${ouverts ? ' (' + ouverts + ')' : ''}`]], A.tab, v => { A.tab = v; renderAdmin(); });
+  seg($('#admSeg'), [['acces', 'Collaborateurs'], ['outils', 'Outils'], ['tickets', `Tickets${ouverts ? ' (' + ouverts + ')' : ''}`],
+    ['historique', 'Historique des actions'], ['coffre', 'Mots de passe du Groupe']], A.tab, v => { A.tab = v; renderAdmin(); });
   renderAdmin();
 }
+/* Titre de la rubrique ; Historique (historique.js) et Mots de passe du Groupe (coffre.js) ont leur propre rendu */
+const ADM_TITRE = {
+  acces: ['Accès aux outils', 'Un collaborateur, des outils, un rôle par outil. Chaque modification est recopiée dans l\'outil concerné.'],
+  outils: ['Outils', 'Nom et description affichés dans le portail.'],
+  tickets: ['Tickets', 'Les demandes envoyées depuis le portail et les outils.'],
+  historique: ['Historique des actions', 'Qui a fait quoi, quand, dans l\'administration du portail. Traces horodatées, non modifiables, non supprimables.'],
+  coffre: ['Mots de passe du Groupe', 'Licences, outils, bases de données : un coffre chiffré de bout en bout, protégé par une phrase secrète connue des seuls administrateurs.']
+};
 function renderAdmin() {
   const body = $('#admBody');
+  const [t, d] = ADM_TITRE[A.tab] || ADM_TITRE.acces; $('#admTitre').textContent = t; $('#admLead').textContent = d;
+  if (A.tab === 'historique') { openHistorique(body); return; }
+  if (A.tab === 'coffre') { renderCoffre(body); return; }
   body.innerHTML = A.tab === 'tickets' ? ticketsAdminHTML() : A.tab === 'outils' ? outilsAdminHTML() : accesAdminHTML();
   const q = $('#admQ'); if (q) { q.value = A.q; q.oninput = () => { A.q = q.value; $('#admList').innerHTML = collabRowsHTML(); }; }
   stagger(body);
@@ -803,6 +816,7 @@ $('#pwdForm').addEventListener('submit', async e => {
 });
 async function logout() {
   await $('#app').animate([{ opacity: 1 }, { opacity: 0 }], { duration: 260, fill: 'forwards' }).done;
+  coffreVerrouiller();
   await sb.auth.signOut();
   S.user = null; S.outils = []; $('#app').getAnimations().forEach(a => a.cancel());
   history.replaceState(null, '', location.pathname); showLogin();
@@ -810,7 +824,8 @@ async function logout() {
 $('#logoutBtn').onclick = logout; $('#logoutBtn2').onclick = logout;
 
 /* démarrage : une session ouverte dans la charte ou le pilotage est reprise sans nouvelle connexion */
-(async function boot() {
+// au DOMContentLoaded : historique.js et coffre.js, chargés après ce fichier, sont alors disponibles
+addEventListener('DOMContentLoaded', async function boot() {
   syncTheme();
   if (!sb) { showLogin(); setMsg($('#loginMsg'), 'Service de connexion indisponible. Vérifiez votre connexion internet puis rechargez la page.'); return; }
   sb.auth.onAuthStateChange(ev => {
@@ -818,8 +833,9 @@ $('#logoutBtn').onclick = logout; $('#logoutBtn2').onclick = logout;
       $('#app').hidden = true; $('#login').hidden = false; $('#loginForm').hidden = true; $('#resetForm').hidden = false; $('#forgotBtn').parentElement.hidden = true;
       $('#loginTitle').textContent = 'Nouveau mot de passe'; $('#loginLead').textContent = 'Choisissez votre nouveau mot de passe, valable pour tous les outils Hympyr.';
     }
+    if (ev === 'SIGNED_OUT') coffreVerrouiller();
     if (ev === 'SIGNED_OUT' && S.user) { S.user = null; showLogin(); } // déconnexion depuis un autre outil ou un autre onglet
   });
   const { data } = await sb.auth.getSession();
   if (data.session) enterApp(data.session); else showLogin();
-})();
+});

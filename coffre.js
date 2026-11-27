@@ -23,13 +23,18 @@ Object.assign(I, {
 
 const COFFRE = { ITER: 600000, INACTIVITE_MS: 5 * 60e3, MASQUE_MS: 60e3, AFFICHAGE_MS: 15e3, PRESSE_PAPIERS_MS: 30e3, PHRASE_MIN: 14 };
 // cle : CryptoKey non exportable · lignes : [{ id, cree_le, maj_le, clair: { i, p, u } }]
-const V = { cle: null, version: 0, etat: null, nb: 0, maj_le: null, lignes: [], q: '', echecs: 0, inact: 0, masque: 0, vus: new Map(), pp: 0 };
+const V = { entite: 'tout', cle: null, version: 0, etat: null, nb: 0, maj_le: null, lignes: [], q: '', echecs: 0, inact: 0, masque: 0, vus: new Map(), pp: 0 };
 const TXT = new TextEncoder(), DTXT = new TextDecoder();
 const b64 = u => { let s = ''; for (const x of u) s += String.fromCharCode(x); return btoa(s); };
 const deb64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
 const aadLigne = (id, v) => TXT.encode(`hympyr-coffre|ligne|${id}|${v}`);
 const aadVerif = v => TXT.encode(`hympyr-coffre|verif|${v}`);
 const VERIF = 'hympyr-coffre-v1';
+// Entité du Groupe : chiffrée avec le reste de la ligne (champ « e »), la base ne la voit pas
+const COFFRE_ENTITES = [['energies', 'Hympyr Energies'], ['granules', 'Granulés'], ['transport', 'Transport']];
+const entiteNom = e => (COFFRE_ENTITES.find(x => x[0] === e) || [])[1] || 'Non classé';
+// Libellé d'une ligne pour l'historique (affiché seulement quand le coffre est ouvert, rien n'est écrit en base)
+const coffreLibelle = c => [c.n || c.i || 'Ligne sans nom', c.e ? entiteNom(c.e) : ''].filter(Boolean).join(' · ');
 
 /* ---------- cryptographie (WebCrypto, aucune dépendance) ---------- */
 async function coffreDeriver(phrase, sel, iterations) {
@@ -197,14 +202,10 @@ async function coffreOuvrir(f) {
 }
 
 /* ---------- tableau ---------- */
-function coffreLignesHTML() {
-  const q = V.q.trim().toLowerCase();
-  const list = V.lignes.filter(l => !q || `${l.clair.i} ${l.clair.u}`.toLowerCase().includes(q))
-    .sort((a, b) => coffreHote(a.clair.u || '').localeCompare(coffreHote(b.clair.u || ''), 'fr') || (a.clair.i || '').localeCompare(b.clair.i || '', 'fr'));
-  if (!list.length) return `<div class="adm-empty glass">${V.lignes.length ? 'Aucune ligne ne correspond.' : 'Le coffre est vide. Ajoutez le premier mot de passe du Groupe.'}</div>`;
-  return list.map(l => {
-    const lien = coffreLienSur(l.clair.u || ''), vu = V.vus.has(l.id);
-    return `<div class="cf-row glass" data-ligne="${esc(l.id)}">
+function coffreLigneHTML(l) {
+  const lien = coffreLienSur(l.clair.u || ''), vu = V.vus.has(l.id);
+  return `<div class="cf-row glass" data-ligne="${esc(l.id)}">
+      <div class="cf-cell cf-usage" data-lab="Usage">${l.clair.n ? `<span class="cf-val">${esc(l.clair.n)}</span>` : '<span class="cf-val muted">À compléter</span>'}</div>
       <div class="cf-cell" data-lab="Identifiant"><span class="cf-val">${esc(l.clair.i || '')}</span>
         ${l.clair.i ? `<button class="icon-btn sm" type="button" data-cf-copier-id aria-label="Copier l'identifiant" title="Copier l'identifiant">${ic('copy')}</button>` : ''}</div>
       <div class="cf-cell" data-lab="Mot de passe"><span class="cf-val mono ${vu ? 'vu' : ''}">${vu ? esc(l.clair.p || '') : '••••••••••••'}</span>
@@ -213,7 +214,25 @@ function coffreLignesHTML() {
       <div class="cf-cell" data-lab="URL de connexion">${lien ? `<a class="cf-val cf-url" href="${esc(lien)}" target="_blank" rel="noopener noreferrer">${esc(coffreHote(lien))}</a>` : `<span class="cf-val muted">${esc(l.clair.u || '')}</span>`}</div>
       <button class="icon-btn sm" type="button" data-cf-modifier aria-label="Modifier cette ligne" title="Modifier">${ic('edit')}</button>
     </div>`;
-  }).join('');
+}
+/* Une section par entité (Hympyr Energies, Granulés, Transport, puis « Non classé » pour les lignes d'avant le classement) */
+function coffreLignesHTML() {
+  const q = V.q.trim().toLowerCase();
+  const list = V.lignes.filter(l => (V.entite === 'tout' || (l.clair.e || '') === V.entite) &&
+      (!q || `${l.clair.n} ${l.clair.i} ${l.clair.u}`.toLowerCase().includes(q)))
+    .sort((a, b) => (a.clair.n || a.clair.i || '').localeCompare(b.clair.n || b.clair.i || '', 'fr', { sensitivity: 'base' }));
+  if (!list.length) return `<div class="adm-empty glass">${V.lignes.length ? 'Aucune ligne ne correspond.' : 'Le coffre est vide. Ajoutez le premier mot de passe du Groupe.'}</div>`;
+  const groupes = [...COFFRE_ENTITES, ['', 'Non classé']].map(([k, nom]) => [nom, list.filter(l => (l.clair.e || '') === k)]).filter(g => g[1].length);
+  return groupes.map(([nom, ls]) => `<section class="cf-groupe">
+      <h3 class="cf-titre">${esc(nom)} <span>${ls.length}</span></h3>
+      <div class="cf-head" aria-hidden="true"><span>Usage</span><span>Identifiant</span><span>Mot de passe</span><span>URL de connexion</span><span></span></div>
+      <div class="adm-list">${ls.map(coffreLigneHTML).join('')}</div></section>`).join('');
+}
+function coffreSegItems() {
+  const n = k => V.lignes.filter(l => (l.clair.e || '') === k).length;
+  const items = [['tout', `Tout (${V.lignes.length})`], ...COFFRE_ENTITES.map(([k, nom]) => [k, `${nom} (${n(k)})`])];
+  if (n('')) items.push(['', `Non classé (${n('')})`]);
+  return items;
 }
 function coffreTableHTML() {
   return `<div class="cf-bar glass" data-st>
@@ -223,19 +242,27 @@ function coffreTableHTML() {
         <button class="btn sm mag" type="button" data-cf-verrouiller>${ic('lock')}<span>Verrouiller</span></button></div>
     </div>
     <div class="adm-tools" data-st>
-      <input class="input" id="cfQ" type="search" placeholder="Rechercher un identifiant ou une adresse" aria-label="Rechercher dans le coffre" autocomplete="off">
+      <input class="input" id="cfQ" type="search" placeholder="Rechercher un usage, un identifiant, une adresse" aria-label="Rechercher dans le coffre" autocomplete="off">
       <div class="adm-tools-r"><span class="muted" style="font-size:13px">${V.lignes.length} mot${V.lignes.length > 1 ? 's' : ''} de passe</span>
         <button class="btn sm mag" type="button" data-cf-ajouter>${ic('plus')}<span>Ajouter</span></button></div>
     </div>
-    <div class="cf-head" aria-hidden="true"><span>Identifiant</span><span>Mot de passe</span><span>URL de connexion</span><span></span></div>
-    <div class="adm-list" id="cfList">${coffreLignesHTML()}</div>
+    <div class="seg glass glide scroll cf-seg" id="cfSeg" role="tablist" aria-label="Entité du Groupe" data-st></div>
+    <div id="cfList">${coffreLignesHTML()}</div>
     <p class="cf-note" data-st>Le presse-papiers est vidé 30 s après une copie. Affichages, copies et modifications sont enregistrés dans l'historique des actions.</p>`;
 }
 function bindCoffreTable() {
   const q = $('#cfQ'); if (q) { q.value = V.q; q.oninput = () => { V.q = q.value; $('#cfList').innerHTML = coffreLignesHTML(); }; }
+  const sg = $('#cfSeg'); if (sg) seg(sg, coffreSegItems(), V.entite, v => { V.entite = v; rafraichirListe(); });
 }
 const ligneDe = el => V.lignes.find(l => l.id === el.closest('[data-ligne]')?.dataset.ligne);
 function rafraichirListe() { const l = $('#cfList'); if (l) l.innerHTML = coffreLignesHTML(); }
+// après un ajout ou un changement d'entité : compteurs du filtre et de la barre
+function rafraichirTout() {
+  if (!coffreSegItems().some(([k]) => k === V.entite)) V.entite = 'tout';
+  const sg = $('#cfSeg'); if (sg) seg(sg, coffreSegItems(), V.entite, v => { V.entite = v; rafraichirListe(); });
+  const compte = $('.cf-bar + .adm-tools .muted'); if (compte) compte.textContent = `${V.lignes.length} mot${V.lignes.length > 1 ? 's' : ''} de passe`;
+  rafraichirListe();
+}
 
 async function coffreCopier(texte, action, id) {
   try { await navigator.clipboard.writeText(texte); } catch (e) { toast('Copie impossible dans ce navigateur', 'x'); return; }
@@ -290,12 +317,18 @@ function coffreModal(html) {
   m.animate([{ opacity: 0, transform: 'translateY(18px) scale(.97)' }, { opacity: 1, transform: 'none' }], { duration: 480, easing: EASE });
 }
 function coffreEditer(l) {
-  const c = l ? l.clair : { i: '', p: genMdp(20), u: '' };
+  // nouvelle ligne : l'entité affichée par le filtre est proposée par défaut
+  const c = l ? l.clair : { n: '', e: COFFRE_ENTITES.some(x => x[0] === V.entite) ? V.entite : '', i: '', p: genMdp(20), u: '' };
+  const entites = `<option value="">Choisir…</option>` + COFFRE_ENTITES.map(([k, nom]) => `<option value="${k}" ${c.e === k ? 'selected' : ''}>${esc(nom)}</option>`).join('');
   coffreModal(`<div class="modal-head"><div><span class="label">Mots de passe du Groupe</span>
       <h2 id="ticketTitle" style="margin-top:6px">${l ? 'Modifier la ligne' : 'Ajouter un mot de passe'}</h2>
       <p>Chiffré dans votre navigateur avant l'envoi.</p></div>
       <button class="icon-btn" data-close aria-label="Fermer">${ic('x')}</button></div>
     <form class="form" id="cfEdit" novalidate>
+      <div class="adm-grid">
+        <label class="field"><span>Entité</span><select class="input" id="cfE">${entites}</select></label>
+        <label class="field"><span>Usage</span><input class="input" id="cfN" maxlength="80" autocomplete="off" value="${esc(c.n || '')}" placeholder="Pennylane, base Supabase, licence Office…"></label>
+      </div>
       <label class="field"><span>Identifiant</span><input class="input" id="cfI" maxlength="300" autocomplete="off" spellcheck="false" value="${esc(c.i)}" placeholder="compta@hympyr.fr, numéro de licence…"></label>
       <div class="field"><span>Mot de passe</span><div class="adm-pwd">
         <input class="input" id="cfP" maxlength="1000" autocomplete="off" spellcheck="false" type="password" value="${esc(c.p)}" data-1p-ignore data-lpignore="true">
@@ -313,16 +346,17 @@ function coffreEditer(l) {
   $('[data-cf-generer]').onclick = () => { champP.value = genMdp(20); champP.type = 'text'; };
   $('#cfEdit').onsubmit = ev => { ev.preventDefault(); coffreEnregistrer(l); };
   const del = $('[data-cf-supprimer]'); if (del) del.onclick = () => coffreSupprimer(l, del);
-  setTimeout(() => $('#cfI').focus({ preventScroll: true }), 200);
+  setTimeout(() => $(c.e ? '#cfN' : '#cfE').focus({ preventScroll: true }), 200);
 }
 async function coffreEnregistrer(l) {
   const err = $('#cfErr'), btn = $('#cfSave');
   let u = $('#cfU').value.trim();
   if (u && !/^[a-z][a-z0-9+.-]*:/i.test(u)) u = 'https://' + u;
-  const n = { i: $('#cfI').value.trim(), p: $('#cfP').value, u };
-  if (!n.i && !n.u) { setMsg(err, 'Renseignez au moins un identifiant ou une URL.'); return; }
+  const n = { e: $('#cfE').value, n: $('#cfN').value.trim(), i: $('#cfI').value.trim(), p: $('#cfP').value, u };
+  if (!n.e) { setMsg(err, 'Choisissez l\'entité : Hympyr Energies, Granulés ou Transport.'); $('#cfE').focus(); return; }
+  if (!n.n) { setMsg(err, 'Indiquez l\'usage : à quoi sert cet identifiant ?'); $('#cfN').focus(); return; }
   if (!n.p) { setMsg(err, 'Le mot de passe est vide.'); return; }
-  const champs = l ? [['i', 'identifiant'], ['p', 'mot_de_passe'], ['u', 'url']].filter(([k]) => (l.clair[k] || '') !== n[k]).map(x => x[1]) : [];
+  const champs = l ? [['e', 'entite'], ['n', 'usage'], ['i', 'identifiant'], ['p', 'mot_de_passe'], ['u', 'url']].filter(([k]) => (l.clair[k] || '') !== n[k]).map(x => x[1]) : [];
   if (l && !champs.length) { await coffreFermer(); return; }
   const id = l ? l.id : crypto.randomUUID();
   btn.disabled = true; btn.lastChild.textContent = 'Chiffrement et envoi';
@@ -331,8 +365,7 @@ async function coffreEnregistrer(l) {
     await coffreRpc('portail_coffre_enregistrer', { p_id: id, p_version: V.version, p_iv: c.iv, p_chiffre: c.chiffre, p_champs: champs });
   } catch (e) { btn.disabled = false; btn.lastChild.textContent = 'Enregistrer'; setMsg(err, e.message); return; }
   if (l) l.clair = n; else V.lignes.push({ id, cree_le: new Date().toISOString(), clair: n });
-  await coffreFermer(); rafraichirListe();
-  const compte = $('.cf-bar + .adm-tools .muted'); if (compte) compte.textContent = `${V.lignes.length} mot${V.lignes.length > 1 ? 's' : ''} de passe`;
+  await coffreFermer(); rafraichirTout();
   toast(!l ? 'Mot de passe ajouté' : champs.includes('mot_de_passe') ? 'Mot de passe modifié et tracé' : 'Ligne modifiée');
 }
 async function coffreSupprimer(l, btn) {
